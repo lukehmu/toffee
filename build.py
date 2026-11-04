@@ -37,7 +37,7 @@ SHADOW_MAX = 1000
 VERSION = 1.0
 VERSION_STRING = "Version 1.000"
 RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
-FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater"]]
+FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide"]]
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
 SLANTS = {0: 0.0, -12: math.tan(math.radians(12))}
@@ -135,7 +135,7 @@ def place(name, strokes, p, g, n_adv, clamped):
     if spec is None:
         x0, x1 = ink_x(strokes, p)
         side = max(PUNCT_SIDE * p.sb, p.min_sb)
-        return strokes, side - x0, round(x1 - x0 + 2 * side)
+        return strokes, side - x0, round(x1 - x0 + 2 * side), 1.0, 0.0
     r, left, right = spec
     top = g.C if name[0].isupper() else g.X
     band = (0.3 * top, top)
@@ -161,6 +161,7 @@ def place(name, strokes, p, g, n_adv, clamped):
     # Measured width is linear in the skeleton scale k, so two measurements solve for the target.
     w1 = (lambda e: e[1] - e[0])(extents(strokes))
     w2 = (lambda e: e[1] - e[0])(extents(scaled(1.2)))
+    k = 1.0
     if w2 - w1 > 1:
         k = 1 + 0.2 * (adv - sl - sr - w1) / (w2 - w1)
         if not SCALE_LIMITS[0] <= k <= SCALE_LIMITS[1]:
@@ -176,7 +177,31 @@ def place(name, strokes, p, g, n_adv, clamped):
         # slide under the next glyph, whose border is painted on top of this glyph's face.
         overhang = ink_x(strokes, p)[1] + dx - adv
         adv += max(0.0, overhang)
-    return strokes, dx, round(adv)
+    return strokes, dx, round(adv), k, sk0
+
+
+def place_composite(strokes, n_base, base_placed):
+    """An accented letter takes its base's placement: base strokes get the base's scale, marks only move.
+
+    Stretching a mark with its base would make the same accent change width from letter to letter.
+    """
+    _, dx, adv, k, sk0 = base_placed
+    out = [[(sk0 + (x - sk0) * k, y, s, r) for x, y, s, r in st] for st in strokes[:n_base]]
+    for st in strokes[n_base:]:
+        xs = [x for x, *_ in st]
+        mid = (min(xs) + max(xs)) / 2
+        shift = (sk0 + (mid - sk0) * k) - mid
+        out.append([(x + shift, y, s, r) for x, y, s, r in st])
+    return out, dx, adv, k, sk0
+
+
+def compound(names):
+    pen = TTGlyphPen(set(names))  # the pen only checks that component names exist
+    for n in names:
+        pen.addComponent(n, (1, 0, 0, 1, 0, 0))
+    g = pen.glyph()
+    g.components[0].flags |= 0x0400  # OVERLAP_COMPOUND: the components overlap
+    return g
 
 
 def notdef():
@@ -205,18 +230,46 @@ def build_master(wght, slnt, shdw):
     space_adv = round(0.3 * g.wn + 120)
     adv = {".notdef": 500, "space": space_adv}
     clamped = []
-    placed = {name: place(name, fn(g), p, g, n_adv, clamped) for name, (_, fn) in GLYPHS.items()}
+    placed = {}
+    composite_of = {}  # accented glyph -> (base glyph, number of base strokes)
+    for name, (_, fn) in GLYPHS.items():
+        strokes = fn(g)
+        base = BASE_OF.get(name)
+        base_strokes = GLYPHS[base][1](g) if base in GLYPHS else None
+        if base_strokes is not None and strokes[: len(base_strokes)] == base_strokes:
+            continue  # placed below, from its base
+        placed[name] = place(name, strokes, p, g, n_adv, clamped)
+    for name, (_, fn) in GLYPHS.items():
+        if name not in placed:
+            base = BASE_OF[name]
+            if base in placed:
+                n_base = len(GLYPHS[base][1](g))
+                placed[name] = place_composite(fn(g), n_base, placed[base])
+                composite_of[name] = (base, n_base)
+            else:  # base is itself a composite: just space it normally
+                placed[name] = place(name, fn(g), p, g, n_adv, clamped)
     if clamped and slnt == 0 and shdw == 0:
         print(f"wght {wght}: width class out of scale range, clamped:", " ".join(clamped))
     for group in FIXED_WIDTH:  # one advance for the group, each glyph centred in it
         width = max(placed[n][2] for n in group)
         for n in group:
-            st, dx, advance = placed[n]
-            placed[n] = (st, dx + (width - advance) / 2, width)
+            st, dx, advance, *rest = placed[n]
+            placed[n] = (st, dx + (width - advance) / 2, width, *rest)
     for name, (uni, _) in GLYPHS.items():
-        strokes, dx, advance = placed[name]
-        glyf[name] = to_glyph(outline(strokes, p, dx, t))
-        glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=SHADOWS[shdw]))
+        strokes, dx, advance, *_ = placed[name]
+        if name in composite_of:
+            # TrueType composite: the base glyph's outline (identical by construction) plus a mark glyph.
+            base, n_base = composite_of[name]
+            mark = name + ".mark"
+            glyf[mark] = to_glyph(outline(strokes[n_base:], p, dx, t))
+            glyf[mark + ".shadow"] = to_glyph(outline(strokes[n_base:], p, dx, t, shadow=SHADOWS[shdw]))
+            glyf[name] = compound([base, mark])
+            glyf[name + ".shadow"] = compound([base + ".shadow", mark + ".shadow"])
+            adv[mark] = adv[mark + ".shadow"] = advance
+            order += [mark, mark + ".shadow"]
+        else:
+            glyf[name] = to_glyph(outline(strokes, p, dx, t))
+            glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=SHADOWS[shdw]))
         adv[name] = adv[name + ".shadow"] = advance
         order += [name, name + ".shadow"]
         if uni is not None:

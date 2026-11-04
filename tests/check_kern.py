@@ -55,7 +55,7 @@ def measure(wght):
         faces[n], adv[n] = cs, f["hmtx"][n][0]
     a = 36 + (wght - 300) * (112 - 36) / 600
     border = 24 + 0.21 * a
-    fc = kern.Faces(faces, adv, border)
+    fc = kern.Faces(faces, adv, border, v_slack=0)  # the true paint-model rule, no kerning slack
     ps = pairs_of(f)
     worst = (1e9, None)
     nz = 0

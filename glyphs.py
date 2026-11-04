@@ -1464,3 +1464,50 @@ def _divide(g):
     r = g.pdot * 0.8
     d = r * g.a + g.b * 0.9 + 50
     return [LN(0, y, w, y, 0.9), DOT(w / 2, y + d, r), DOT(w / 2, y - d, r)]
+
+
+# ---------------------------------------------------------------- guillemets, inverted marks
+
+
+def _rot180(strokes, cx, cy):
+    """The same samples rotated 180 degrees about (cx, cy): point counts are unchanged."""
+    return [[(2 * cx - x, 2 * cy - y, s, r) for x, y, s, r in st] for st in strokes]
+
+
+def _chevron(g, x0, w, left):
+    y, h = 0.44 * g.X, 0.2 * g.X
+    tip, back = (x0, x0 + w) if left else (x0 + w, x0)
+    return S(LN(back, y + h, tip, y, 0.8, 0.85), LN(tip, y, back, y - h, 0.85, 0.8))
+
+
+@glyph("guilsinglleft", 0x2039)
+def _guilsinglleft(g):
+    return [_chevron(g, 0, g.wn * 0.42, True)]
+
+
+@glyph("guilsinglright", 0x203A)
+def _guilsinglright(g):
+    return [_chevron(g, 0, g.wn * 0.42, False)]
+
+
+@glyph("guillemotleft", 0x00AB)
+def _guillemotleft(g):
+    w = g.wn * 0.42
+    return [_chevron(g, 0, w, True), _chevron(g, w * 0.95 + g.a, w, True)]
+
+
+@glyph("guillemotright", 0x00BB)
+def _guillemotright(g):
+    w = g.wn * 0.42
+    return [_chevron(g, 0, w, False), _chevron(g, w * 0.95 + g.a, w, False)]
+
+
+@glyph("exclamdown", 0x00A1)
+def _exclamdown(g):
+    return _rot180(_exclam(g), 0, g.X / 2)
+
+
+@glyph("questiondown", 0x00BF)
+def _questiondown(g):
+    w = g.wn * 0.95
+    return _rot180(_question(g), w / 2, g.X / 2)

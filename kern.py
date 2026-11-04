@@ -20,6 +20,7 @@ CAP = 1.6  # per-row gap cap, in reference gaps
 STRENGTH = 0.85
 MIN_KERN = 10
 MARGIN = 16  # face gap above the border that must remain
+V_SLACK = 60  # extra vertical tolerance for the paint-model floor
 MIN_ROWS = 4  # overlap rows needed before the optical measure is trusted
 
 # Left-hand glyphs whose right side has an awkward shape, and right-hand glyphs whose left side does.
@@ -37,17 +38,27 @@ OTHERS = (
 ).split()
 
 
+def _with_composites(base_names, have):
+    """The names plus every accented glyph built on one of them (BASE_OF), in a stable order."""
+    from glyphs import BASE_OF
+
+    out = [n for n in base_names if n in have]
+    out += [c for c, b in BASE_OF.items() if b in base_names and c in have]
+    return out
+
+
 def pair_list(names):
     """Deterministic (left, right) pairs from glyph names alone."""
     have = set(names)
-    others = [n for n in OTHERS if n in have]
+    others = _with_composites(OTHERS, have)
+    lefts, rights = _with_composites(LEFT, have), _with_composites(RIGHT, have)
     pairs, seen = [], set()
-    for left in (n for n in LEFT if n in have):
+    for left in lefts:
         for right in others:
             if (left, right) not in seen:
                 seen.add((left, right))
                 pairs.append((left, right))
-    for right in (n for n in RIGHT if n in have):
+    for right in rights:
         for left in others:
             if (left, right) not in seen:
                 seen.add((left, right))
@@ -84,10 +95,12 @@ def profile(contours):
 class Faces:
     """Row profiles of every glyph, plus the dilated left edge the paint-model floor needs."""
 
-    def __init__(self, faces, advances, border):
+    def __init__(self, faces, advances, border, v_slack=V_SLACK):
         self.adv = advances
         self.prof = {n: profile(c) for n, c in faces.items()}
-        w = int(border // STEP)
+        # Vertical tolerance: the border, plus slack for shapes that move vertically between weights,
+        # so a pair that comes close at an interpolated weight is already caught at both masters.
+        w = int((border + v_slack) // STEP)
         self.dil = {}
         for n, pr in self.prof.items():
             d = {}

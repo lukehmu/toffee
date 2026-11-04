@@ -204,7 +204,9 @@ h1 {
     setTimeout(() => e.target.textContent = "Copy", 1500);
   });
 
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.,:;'\"()[]{}/\\|-–—+−=<>*#%$£€&@…“”‘’•·_~^";
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.,:;'\"()[]{}/\\|-–—+−×÷=<>*#%$£€&@…“”‘’«»‹›¡¿•·_~^" +
+    "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ" +
+    "ĄąĆćČčĎďĐđĘęĚěıĽľŁłŃńŇňŐőŒœŔŕŘřŚśŠšŤťŮůŰűŸŹźŻżŽž";
   const grid = document.getElementById("grid");
   for (const c of chars) {
     const b = document.createElement("button");

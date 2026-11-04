@@ -15,7 +15,9 @@ CPAL palettes: 0 toffee (chocolate shadow, cream face), 1 orange/white, 2 black/
 them. Safari and iOS don't support COLRv1 yet, so there, like any other non-COLR renderer, you get the plain
 monochrome face. To feature-detect: `CSS.supports("font-tech(color-COLRv1)")`.
 
-**Character set.** Basic Latin (A–Z, a–z, 0–9, ASCII punctuation), curly quotes, dashes, ellipsis, bullet, £ and €.
+**Character set.** 235 characters: Basic Latin, all Latin-1 letters (À–ÿ), Œ œ Š š Ž ž Ÿ ı, and the Central
+European letters Ą Ć Č Ď Đ Ę Ě Ľ Ł Ń Ň Ő Ŕ Ř Ś Ť Ů Ű Ź Ż, with their lowercase. Also curly quotes, « » ‹ ›, ¡ ¿,
+dashes, ellipsis, × ÷ − £ €. Kerning is generated from the outlines at every weight.
 
 In CSS:
 

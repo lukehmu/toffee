@@ -8,7 +8,11 @@ Demo: https://lukehmu.github.io/toffee/ (GitHub Pages serves `index.html` from `
 
 ## Commands
 
-    uv run build.py        # -> fonts/Toffee[SHDW,slnt,wght].{ttf,woff2}  (~10 s; masters go to build/, ignored)
+    uv run build.py          # -> fonts/Toffee[SHDW,slnt,wght].{ttf,woff2}  (~30 s; masters go to build/, ignored)
+    uv run tests/check_kern.py   # after a build: kerned pairs keep faces >= border + 4 apart at wght 300/600/900
+
+Deps are locked in `build.py.lock`. Builds are byte-reproducible (`RELEASE_EPOCH` → `SOURCE_DATE_EPOCH`), so a rebuild
+with no source change leaves `fonts/` untouched: a font diff means the source changed.
 
 Render checks (do both after a glyph change; Chrome is the main target, blackrenderer is a second COLRv1 implementation):
 
@@ -30,7 +34,13 @@ shadow so Windows doesn't clip it. `interpolation_issues` "start point differs" 
 - **`glyphs.py`**: each glyph function takes `g = geo(p)` (pen size and metrics for one master) and returns strokes.
   A stroke is a list of samples `(x, y, pen_scale, roundness)` built with `LN`, `ARC`, `DOT` and `S`. The glyph's x
   origin is arbitrary, because spacing is computed later. `roundness` 1 turns the elliptical pen into a circle (dots and
-  ball terminals). Group-private helpers are prefixed `_lc_`, `_uc_`, `_fig_` and `_pn_`.
+  ball terminals). Group-private helpers are prefixed `_lc_`, `_uc_`, `_fig_`, `_pn_`, `_gf_` and `_ac_` (accents).
+  Dot radii (`idot`, `pdot` in `geo()`) are written so that radius = c0 + c1·a. A radius that's linear in `a`
+  interpolates exactly between the two weight masters; a scale that's linear in `a` would make it quadratic.
+- **Accented letters** call their base glyph's function and append mark strokes, then register in `BASE_OF`. The
+  build gives them the base's placement (the base strokes get the base's horizontal scale; marks only move) and emits
+  them as TrueType composites: base + `name.mark`, and `base.shadow` + `name.mark.shadow`. A composite whose first
+  strokes don't equal its base's strokes is drawn as a plain glyph instead.
 - **`build.py`**: the pen is an ellipse (half-width `a`, half-height `b`, per weight in `WEIGHTS`). Every pair of
   consecutive samples becomes one convex hull of two ellipses, sampled at `K` = 24 fixed directions and written as an
   all-off-curve TrueType contour. A glyph is therefore many overlapping convex contours, never a boolean union
@@ -46,8 +56,13 @@ shadow so Windows doesn't clip it. `interpolation_issues` "start point differs" 
   ratio of n's) and a side type for each side: straight, round, diagonal, or a ("T", ratio) tail side measured
   only inside the x-height band. It solves a horizontal skeleton scale that hits the class; the pen is never
   scaled. Sidebearings (`pen_params`) open up as the weight drops, with a floor of `border/2 + 4`. Glyphs not in
-  `SPACING` keep their drawn width. `FIXED_WIDTH` groups share one advance. There is no kerning. The numbers come
-  from `docs/consistency.md` (measured against 7 OFL fonts); change them there first.
+  `SPACING` keep their drawn width. `FIXED_WIDTH` groups share one advance. The numbers come from
+  `docs/consistency.md` (measured against 7 OFL fonts); change them there first.
+- **Kerning** (`kern.py`): computed per master from the upright faces' row profiles, so values follow the weight.
+  It closes open pairs towards the n–n/H–H reference gap. A paint-model floor (face gap ≥ border + `MARGIN`, with
+  `V_SLACK` extra vertical tolerance because shapes move vertically between weights) overrides it. The pair list
+  depends only on glyph names (accented letters included through `BASE_OF`), so every master emits the same pairs
+  and varLib can merge GPOS.
 
 ## The invariant that breaks builds
 
