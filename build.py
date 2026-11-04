@@ -13,7 +13,8 @@ from fontTools.designspaceLib import AxisDescriptor, DesignSpaceDocument, Instan
 from fontTools.fontBuilder import FontBuilder
 from fontTools.otlLib.builder import buildStatTable
 from fontTools.pens.ttGlyphPen import TTGlyphPen
-from fontTools.ttLib import TTFont
+from fontTools.ttLib import TTFont, newTable
+from fontTools.ttLib.tables import ttProgram
 from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple
 from fontTools.ttLib.tables.otTables import PaintFormat
 from fontTools import varLib
@@ -33,6 +34,9 @@ SIDEBEARING = BORDER / 2 + 14
 ROUND_ADJ = 10
 SHADOW_DIR = (0.66, -0.75)
 SHADOW_MAX = 1000
+VERSION = 1.0
+VERSION_STRING = "Version 1.000"
+FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater"]]
 
 WEIGHTS = {300: (36, 26), 900: (112, 60)}  # wght -> (pen half-width, pen half-height)
 SLANTS = {0: 0.0, -12: math.tan(math.radians(12))}
@@ -100,6 +104,20 @@ def spacing(name, strokes, p):
     return lsb - min(xs), round(max(xs) - min(xs) + lsb + rsb)
 
 
+def notdef():
+    pen = TTGlyphPen(None)
+    for box in [(60, 0, 440, 730), (120, 60, 380, 670)]:
+        x0, y0, x1, y1 = box
+        pts = [(x0, y0), (x0, y1), (x1, y1), (x1, y0)]
+        if box[0] == 120:
+            pts.reverse()
+        pen.moveTo(pts[0])
+        for pt in pts[1:]:
+            pen.lineTo(pt)
+        pen.closePath()
+    return pen.glyph()
+
+
 def build_master(wght, slnt, shdw):
     a, b = WEIGHTS[wght]
     p = SimpleNamespace(a=a, b=b)
@@ -107,12 +125,19 @@ def build_master(wght, slnt, shdw):
     t = SLANTS[slnt]
     order = [".notdef", "space"]
     cmap = {0x20: "space", 0xA0: "space"}
-    glyf = {".notdef": TTGlyphPen(None).glyph(), "space": TTGlyphPen(None).glyph()}
+    glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
     space_adv = round(0.3 * g.wn + 120)
-    adv = {".notdef": space_adv, "space": space_adv}
-    for name, (uni, fn) in GLYPHS.items():
-        strokes = fn(g)
-        dx, advance = spacing(name, strokes, p)
+    adv = {".notdef": 500, "space": space_adv}
+    strokes_of = {name: fn(g) for name, (_, fn) in GLYPHS.items()}
+    placed = {name: spacing(name, st, p) for name, st in strokes_of.items()}
+    for group in FIXED_WIDTH:  # one advance for the group, each glyph centred in it
+        width = max(placed[n][1] for n in group)
+        for n in group:
+            dx, advance = placed[n]
+            placed[n] = (dx + (width - advance) / 2, width)
+    for name, (uni, _) in GLYPHS.items():
+        strokes = strokes_of[name]
+        dx, advance = placed[name]
         glyf[name] = to_glyph(outline(strokes, p, dx, t))
         glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=SHADOWS[shdw]))
         adv[name] = adv[name + ".shadow"] = advance
@@ -130,11 +155,12 @@ def build_master(wght, slnt, shdw):
         metrics[n] = (adv[n], getattr(gl[n], "xMin", 0))
     fb.setupHorizontalMetrics(metrics)
     fb.setupHorizontalHeader(ascent=930, descent=-300)
-    fb.setupNameTable({"familyName": FAMILY, "styleName": "Regular"})
+    fb.setupNameTable({"familyName": FAMILY, "styleName": "Regular", "version": VERSION_STRING}, mac=False)
+    fb.font["head"].fontRevision = VERSION
     fb.setupOS2(
         usWeightClass=wght,
         sTypoAscender=930, sTypoDescender=-300, sTypoLineGap=0,
-        usWinAscent=1300, usWinDescent=1300,
+        usWinAscent=1000, usWinDescent=300,  # replaced on the VF by the real extremes over all masters
         sxHeight=540, sCapHeight=730, fsSelection=0x80 | 0x40,
         achVendID="NONE", version=4,
     )
@@ -208,7 +234,7 @@ def main():
                 {"value": 0, "name": "Upright", "flags": 2}, {"value": -12, "name": "Oblique"}]},
             {"tag": "SHDW", "name": "Shadow", "values": [
                 {"value": 0, "name": "Outline", "flags": 2}, {"value": 400, "name": "Shadow"},
-                {"value": 1000, "name": "Long Shadow"}]},
+                {"value": 1000, "name": "Long"}]},
         ],
         elidedFallbackName=2,
     )
@@ -222,7 +248,19 @@ def main():
     vf["name"].setName("Black", 2, 3, 1, 0x409)
     vf["name"].setName(f"{FAMILY}-Black", 6, 3, 1, 0x409)
     vf["name"].setName(f"{FAMILY} Black", 4, 3, 1, 0x409)
-    vf["name"].setName(f"{FAMILY}-Variable", 25, 3, 1, 0x409)
+    vf["name"].setName(FAMILY, 25, 3, 1, 0x409)
+    os2 = vf["OS/2"]
+    os2.recalcCodePageRanges(vf)
+    os2.usWinAscent = max(m["head"].yMax for m in masters)
+    os2.usWinDescent = max(-m["head"].yMin for m in masters)
+    prep = newTable("prep")  # smart dropout control for unhinted TrueType
+    prep.program = ttProgram.Program()
+    prep.program.fromAssembly(["PUSHW[ ]", "511", "SCANCTRL[ ]", "PUSHB[ ]", "4", "SCANTYPE[ ]"])
+    vf["prep"] = prep
+    vf["name"].removeNames(platformID=1)
+    gasp = newTable("gasp")
+    gasp.version, gasp.gaspRange = 1, {0xFFFF: 0x000F}
+    vf["gasp"] = gasp
     stem = OUT / f"{FAMILY}[SHDW,slnt,wght]"
     vf.save(stem.with_suffix(".ttf"))
     vf.flavor = "woff2"
