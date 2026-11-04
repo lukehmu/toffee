@@ -35,15 +35,19 @@ shadow so Windows doesn't clip it. `interpolation_issues` "start point differs" 
   consecutive samples becomes one convex hull of two ellipses, sampled at `K` = 24 fixed directions and written as an
   all-off-curve TrueType contour. A glyph is therefore many overlapping convex contours, never a boolean union
   (`OVERLAP_SIMPLE` is set). Slant is a shear applied inside the hull maths.
-- **Shadow**: every glyph `x` has a `x.shadow` glyph, made of the same hulls with the pen grown by `BORDER` and swept
+- **Shadow**: every glyph `x` has a `x.shadow` glyph, made of the same hulls with the pen grown by `p.border` (weight-scaled) and swept
   along `SHADOW_DIR × SHDW`. COLR paints `x.shadow` (palette index 0) under `x` (index 1). Non-COLR renderers show
   only `x`, the plain face. A down-right shadow over left-to-right text only works because each glyph's shadow is
-  covered by the glyphs drawn after it. Sidebearings must stay ≥ `BORDER/2`, or a glyph's border paints over its
-  neighbour's face.
+  covered by the glyphs drawn after it. Sidebearings must stay ≥ `border/2`, or a glyph's border paints over its
+  neighbour's face. For the same reason a baseline tail must end inside its own advance.
 - **Masters**: wght × slnt × SHDW corners (8), built separately, then `varLib.build`. Then COLR/CPAL, STAT, name and
   OS/2 fixes are applied to the VF.
-- **Spacing**: in `spacing()`, from the upright outline's bbox plus `SIDEBEARING`, minus `ROUND_ADJ` for glyphs in
-  `ROUND_LEFT`/`ROUND_RIGHT`. `FIXED_WIDTH` groups share one advance. There is no kerning.
+- **Spacing**: `place()` reads `SPACING` in `glyphs.py`, which gives each glyph a width class r (its advance as a
+  ratio of n's) and a side type for each side: straight, round, diagonal, or a ("T", ratio) tail side measured
+  only inside the x-height band. It solves a horizontal skeleton scale that hits the class; the pen is never
+  scaled. Sidebearings (`pen_params`) open up as the weight drops, with a floor of `border/2 + 4`. Glyphs not in
+  `SPACING` keep their drawn width. `FIXED_WIDTH` groups share one advance. There is no kerning. The numbers come
+  from `docs/consistency.md` (measured against 7 OFL fonts); change them there first.
 
 ## The invariant that breaks builds
 

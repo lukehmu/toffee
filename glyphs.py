@@ -61,13 +61,16 @@ def at(cx, cy, rx, ry, ang):
 
 def geo(p):
     a, b = p.a, p.b
-    X, C, A, D, ov = 540, 730, 780, -230, 10
+    X, C, A, D, ov, ovC = 570, 730, 780, -230, 10, 14
     return SimpleNamespace(
-        a=a, b=b, X=X, C=C, A=A, D=D, ov=ov,
+        a=a, b=b, X=X, C=C, A=A, D=D, ov=ov, ovC=ovC,
         yb=b, yx=X - b, yC=C - b, yA=A - b, yD=D + b,
-        cy=X / 2, ry=X / 2 + ov - b, cyC=C / 2, ryC=C / 2 + ov - b,
-        wn=200 + 1.6 * a,
-        dot=0.62 + 0.0035 * a,  # dot/ball scale (circle radius = dot * a)
+        cy=X / 2, ry=X / 2 + ov - b, cyC=C / 2, ryC=C / 2 + ovC - b,
+        # Natural proportions only: build.py rescales each glyph's skeleton to its width class (SPACING).
+        wn=375,
+        dot=1.0,  # terminal-ball scale (circle radius = dot * a); constant relative to the pen
+        idot=1.58 - 0.0046 * a,  # i/j dots and punctuation: relatively bigger at light weights
+        igap=155 - a,  # x-height to the i-dot
     )
 
 
@@ -147,7 +150,7 @@ def s_shape(g, cx, rx, top, bot, k=1.0):
 @glyph("a")
 def _a(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yx, g.wn * 0.28)]
+    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yx, g.wn * 0.2)]
 
 
 @glyph("b")
@@ -170,7 +173,7 @@ def _c(g):
 @glyph("d")
 def _d(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yA, g.wn * 0.28)]
+    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yA, g.wn * 0.2)]
 
 
 @glyph("e")
@@ -206,12 +209,12 @@ def _h(g):
 
 @glyph("i")
 def _i(g):
-    return [LN(0, g.yx, 0, g.yb), DOT(0, g.X + 50 + g.dot * g.a, g.dot)]
+    return [LN(0, g.yx, 0, g.yb), DOT(0, g.X + g.igap + g.idot * g.a, g.idot)]
 
 
 @glyph("j")
 def _j(g):
-    return [hook_left(g, 0, g.yx, g.wn * 0.34), DOT(0, g.X + 50 + g.dot * g.a, g.dot)]
+    return [hook_left(g, 0, g.yx, g.wn * 0.34), DOT(0, g.X + g.igap + g.idot * g.a, g.idot)]
 
 
 @glyph("k")
@@ -281,7 +284,7 @@ def _t(g):
 @glyph("u")
 def _u(g):
     w = _lc_nw(g)
-    return [u_cup(g, 0, w), tail_right(g, w, g.yx, g.wn * 0.28)]
+    return [u_cup(g, 0, w), tail_right(g, w, g.yx, g.wn * 0.2)]
 
 
 @glyph("v")
@@ -533,7 +536,7 @@ def _Z(g):
 
 
 def fig_w(g):
-    return g.wn * 1.05 + g.a * 0.8
+    return g.wn * 0.95 + g.a * 0.3
 
 
 @glyph("zero")
@@ -643,56 +646,56 @@ def _9(g):
 
 
 def ball(g, x, y, s=1.0):
-    return DOT(x, y + 0, g.dot * s)
+    return DOT(x, y + 0, g.idot * s)
 
 
 @glyph("period")
 def _period(g):
-    return [ball(g, 0, g.dot * g.a)]
+    return [ball(g, 0, g.idot * g.a)]
 
 
 @glyph("comma")
 def _comma(g):
-    r = g.dot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.dot * 0.4, 1)])]
+    r = g.idot * g.a
+    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.idot * 0.4, 1)])]
 
 
 @glyph("colon")
 def _colon(g):
-    r = g.dot * g.a
+    r = g.idot * g.a
     return [ball(g, 0, r), ball(g, 0, g.X - r)]
 
 
 @glyph("semicolon")
 def _semicolon(g):
-    r = g.dot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.dot * 0.4, 1)]), ball(g, 0, g.X - r)]
+    r = g.idot * g.a
+    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.idot * 0.4, 1)]), ball(g, 0, g.X - r)]
 
 
 @glyph("exclam")
 def _exclam(g):
-    r = g.dot * g.a
+    r = g.idot * g.a
     return [LN(0, g.yC, 0, 2 * r + 120, 1.05, 0.7, 0.3, 0.3), ball(g, 0, r)]
 
 
 @glyph("question")
 def _question(g):
-    r = g.dot * g.a
+    r = g.idot * g.a
     w = g.wn * 0.95
     rq = 0.2 * g.C
     yq = g.C + g.ov - g.b - rq
     return [
-        S(ARC(w / 2, yq, w / 2, rq, 160, -90, g.dot * 1.05, 1, 0.8, 0), LN(w / 2, yq - rq, w / 2, 2 * r + 120, 1, 0.8)),
+        S(ARC(w / 2, yq, w / 2, rq, 160, -90, g.idot * 1.05, 1, 0.8, 0), LN(w / 2, yq - rq, w / 2, 2 * r + 120, 1, 0.8)),
         ball(g, w / 2, r),
     ]
 
 
 def tick(g, x, ytop, flip=False):
     """A comma-shaped quote: ball at top, tail going down (or ball at bottom, tail up)."""
-    r = g.dot * g.a
+    r = g.idot * g.a
     if flip:
-        return S([(x - r * 0.15, ytop, g.dot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.dot))
-    return S(DOT(x, ytop - r, g.dot), [(x + r * 0.15, ytop - r * 2.6, g.dot * 0.4, 1)])
+        return S([(x - r * 0.15, ytop, g.idot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.idot))
+    return S(DOT(x, ytop - r, g.idot), [(x + r * 0.15, ytop - r * 2.6, g.idot * 0.4, 1)])
 
 
 @glyph("quotesingle")
@@ -718,13 +721,13 @@ def _ql(g):
 
 @glyph("quotedblright", 0x201D)
 def _qdr(g):
-    d = 2 * g.a * g.dot + 70
+    d = 2 * g.a * g.idot + 70
     return [tick(g, 0, g.C), tick(g, d, g.C)]
 
 
 @glyph("quotedblleft", 0x201C)
 def _qdl(g):
-    d = 2 * g.a * g.dot + 70
+    d = 2 * g.a * g.idot + 70
     return [tick(g, 0, g.C, flip=True), tick(g, d, g.C, flip=True)]
 
 
@@ -921,19 +924,19 @@ def _at(g):
 
 @glyph("ellipsis", 0x2026)
 def _ellipsis(g):
-    r = g.dot * g.a
+    r = g.idot * g.a
     d = 2 * r + 70
     return [ball(g, 0, r), ball(g, d, r), ball(g, 2 * d, r)]
 
 
 @glyph("bullet", 0x2022)
 def _bullet(g):
-    return [DOT(0, 0.48 * g.X, g.dot * 1.15)]
+    return [DOT(0, 0.48 * g.X, g.idot * 1.15)]
 
 
 @glyph("periodcentered", 0x00B7)
 def _middot(g):
-    return [ball(g, 0, 0.48 * g.X - g.dot * g.a)]
+    return [ball(g, 0, 0.48 * g.X - g.idot * g.a)]
 
 
 @glyph("asciitilde")
@@ -1000,5 +1003,31 @@ def _euro(g):
     ]
 
 
-ROUND_LEFT = set("acdeoqCGOQS") | {"zero", "two", "three", "five", "six", "eight", "nine", "parenright", "Euro"}
-ROUND_RIGHT = set("bopDOQS") | {"zero", "three", "five", "six", "eight", "nine", "parenleft"}
+# Spacing system (see docs/consistency.md). Per glyph: (width class r, left side, right side).
+# r = advance / n-advance; build.py scales the skeleton (not the pen) horizontally to hit it.
+# Sides are multiples of the straight sidebearing: 1 straight, R round, D diagonal. A ("T", ratio) side has a
+# tail or hook: it is measured only inside the x-height (caps: cap-height) band, so the tail overhangs.
+# Glyphs not listed keep their drawn width with PUNCT_SIDE sidebearings.
+R, D = 0.7, 0.35
+T, TR = ("T", 1.0), ("T", 0.7)
+SPACING = {
+    # lowercase
+    "a": (1.00, R, T), "b": (1.00, 1, R), "c": (0.85, R, R), "d": (1.00, R, T), "e": (0.95, R, R),
+    "f": (0.75, 0.2, ("T", 0.3)), "g": (0.95, TR, 1), "h": (1.00, 1, 1), "i": (0.50, 1, 1), "j": (0.50, T, 1),
+    "k": (0.95, 1, D), "l": (0.50, 1, T), "m": (1.45, 1, 1), "n": (1.00, 1, 1), "o": (1.00, R, R),
+    "p": (1.00, 1, R), "q": (1.00, R, 1), "r": (0.80, 1, D), "s": (0.85, 0.62, 0.62), "t": (0.75, 0.34, ("T", 0.5)),
+    "u": (1.00, 1, T), "v": (0.95, D, D), "w": (1.36, D, D), "x": (0.90, D, D), "y": (0.95, T, 1),
+    "z": (0.85, 0.8, 0.8),
+    # uppercase
+    "A": (1.08, D, D), "B": (1.08, 1, 0.66), "C": (1.00, R, R), "D": (1.15, 1, R), "E": (0.92, 1, 0.8),
+    "F": (0.92, 1, 0.8), "G": (1.15, R, 0.8), "H": (1.15, 1, 1), "I": (0.52, 1, 1), "J": (0.92, 0.45, 1),
+    "K": (1.08, 1, D), "L": (0.92, 1, 0.6), "M": (1.37, 1, 1), "N": (1.15, 1, 1), "O": (1.15, R, R),
+    "P": (1.00, 1, 0.47), "Q": (1.15, R, TR), "R": (1.08, 1, 0.44), "S": (1.00, 0.62, 0.62), "T": (1.00, 0.5, 0.5),
+    "U": (1.15, 1, 1), "V": (1.08, D, D), "W": (1.55, D, D), "X": (1.15, D, D), "Y": (1.08, D, D),
+    "Z": (1.00, 0.8, 0.8),
+    # figures (proportional)
+    "zero": (0.96, R, R), "one": (0.67, 0.5, 1), "two": (0.92, R, 0.8), "three": (0.92, 0.6, R),
+    "four": (0.96, 0.5, 1), "five": (0.92, 0.8, R), "six": (0.96, R, R), "seven": (0.92, 0.6, 0.5),
+    "eight": (0.96, R, R), "nine": (0.96, R, R),
+}
+PUNCT_SIDE = 0.8

@@ -19,7 +19,7 @@ from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple
 from fontTools.ttLib.tables.otTables import PaintFormat
 from fontTools import varLib
 
-from glyphs import GLYPHS, ROUND_LEFT, ROUND_RIGHT, geo
+from glyphs import GLYPHS, PUNCT_SIDE, SPACING, geo
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "fonts"
@@ -29,16 +29,14 @@ FAMILY = "Toffee"
 K = 24  # support directions per convex piece
 DIRS = [(math.cos(2 * math.pi * k / K), math.sin(2 * math.pi * k / K)) for k in range(K)]
 Y0 = 270  # shear origin
-BORDER = 48
-SIDEBEARING = BORDER / 2 + 14
-ROUND_ADJ = 10
+SCALE_LIMITS = (0.7, 1.35)  # how far a glyph's skeleton may be stretched to reach its width class
 SHADOW_DIR = (0.66, -0.75)
 SHADOW_MAX = 1000
 VERSION = 1.0
 VERSION_STRING = "Version 1.000"
 FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater"]]
 
-WEIGHTS = {300: (36, 26), 900: (112, 60)}  # wght -> (pen half-width, pen half-height)
+WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
 SLANTS = {0: 0.0, -12: math.tan(math.radians(12))}
 SHADOWS = {0: 0.0, SHADOW_MAX: float(SHADOW_MAX)}
 
@@ -74,7 +72,7 @@ def outline(strokes, p, dx, t, shadow=None):
             pa = s * p.a
             pb = s * (p.b + r * (p.a - p.b))
             if shadow is not None:
-                pa, pb = pa + BORDER, pb + BORDER
+                pa, pb = pa + p.border, pb + p.border
             ells.append((x + dx + t * (y - Y0), y, pa, pb))
         pieces = [[ells[0]]] if len(ells) == 1 else [[ells[i], ells[i + 1]] for i in range(len(ells) - 1)]
         for piece in pieces:
@@ -96,12 +94,86 @@ def to_glyph(contours):
     return g
 
 
-def spacing(name, strokes, p):
-    """Return (dx, advance) from the upright face outline."""
-    xs = [x for c in outline(strokes, p, 0, 0.0) for x, _ in c]
-    lsb = SIDEBEARING - (ROUND_ADJ if name in ROUND_LEFT else 0)
-    rsb = SIDEBEARING - (ROUND_ADJ if name in ROUND_RIGHT else 0)
-    return lsb - min(xs), round(max(xs) - min(xs) + lsb + rsb)
+def pen_params(a, b):
+    """Per-weight pen, border and spacing. All linear in a, so two masters reproduce them exactly."""
+    border = 24 + 0.21 * a  # outline thickness of the shadow layer
+    sb = 99 - 0.6 * a  # straight sidebearing: references open sidebearings as weight drops
+    # A glyph's border must not paint over its neighbour's face, so no side goes below half the border.
+    return SimpleNamespace(a=a, b=b, border=border, sb=sb, min_sb=border / 2 + 4)
+
+
+def ink_x(strokes, p, band=None):
+    """Ink x-extent of the upright outline, optionally only from points with band[0] <= y <= band[1]."""
+    contours = outline(strokes, p, 0, 0.0)
+    if band is None:
+        xs = [x for c in contours for x, _ in c]
+        return min(xs), max(xs)
+    lo, hi = band
+    xs = []
+    for c in contours:  # clip each convex polygon to the band: vertices inside plus edge crossings
+        for (xa, ya), (xb, yb) in zip(c, c[1:] + c[:1]):
+            if lo <= ya <= hi:
+                xs.append(xa)
+            for yy in (lo, hi):
+                if (ya - yy) * (yb - yy) < 0:
+                    xs.append(xa + (xb - xa) * (yy - ya) / (yb - ya))
+    if not xs:
+        return ink_x(strokes, p)
+    return min(xs), max(xs)
+
+
+def place(name, strokes, p, g, n_adv, clamped):
+    """Return (strokes, dx, advance) following the SPACING table in glyphs.py.
+
+    A side marked ("T", ratio) is measured only inside the main band (x-height, or cap height for
+    capitals), so tails, hooks and descender flicks overhang into the neighbour's space.
+    """
+    spec = SPACING.get(name)
+    if spec is None:
+        x0, x1 = ink_x(strokes, p)
+        side = max(PUNCT_SIDE * p.sb, p.min_sb)
+        return strokes, side - x0, round(x1 - x0 + 2 * side)
+    r, left, right = spec
+    top = g.C if name[0].isupper() else g.X
+    band = (0.3 * top, top)
+
+    def extents(st):
+        full = ink_x(st, p)
+        lo = ink_x(st, p, band)[0] if isinstance(left, tuple) else full[0]
+        hi = ink_x(st, p, band)[1] if isinstance(right, tuple) else full[1]
+        return lo, hi
+
+    def ratio(side):
+        return side[1] if isinstance(side, tuple) else side
+
+    adv = r * n_adv
+    sl = max(ratio(left) * p.sb, p.min_sb)
+    sr = max(ratio(right) * p.sb, p.min_sb)
+    sk = [x for st in strokes for x, *_ in st]
+    sk0 = min(sk)
+
+    def scaled(k):
+        return [[(sk0 + (x - sk0) * k, y, s, rr) for x, y, s, rr in st] for st in strokes]
+
+    # Measured width is linear in the skeleton scale k, so two measurements solve for the target.
+    w1 = (lambda e: e[1] - e[0])(extents(strokes))
+    w2 = (lambda e: e[1] - e[0])(extents(scaled(1.2)))
+    if w2 - w1 > 1:
+        k = 1 + 0.2 * (adv - sl - sr - w1) / (w2 - w1)
+        if not SCALE_LIMITS[0] <= k <= SCALE_LIMITS[1]:
+            clamped.append(f"{name}:{k:.2f}")
+            k = min(max(k, SCALE_LIMITS[0]), SCALE_LIMITS[1])
+        strokes = scaled(k)
+    x0, x1 = extents(strokes)
+    spare = adv - (x1 - x0) - sl - sr  # non-zero only when the scale was clamped
+    sl += spare * sl / (sl + sr)
+    dx = sl - x0
+    if isinstance(right, tuple):
+        # A right-hand tail (baseline flick, f's hook) must end inside the advance: overhanging it would
+        # slide under the next glyph, whose border is painted on top of this glyph's face.
+        overhang = ink_x(strokes, p)[1] + dx - adv
+        adv += max(0.0, overhang)
+    return strokes, dx, round(adv)
 
 
 def notdef():
@@ -120,24 +192,26 @@ def notdef():
 
 def build_master(wght, slnt, shdw):
     a, b = WEIGHTS[wght]
-    p = SimpleNamespace(a=a, b=b)
+    p = pen_params(a, b)
     g = geo(p)
+    n_adv = g.wn + 2 * a + 2 * p.sb  # every width class is a ratio of this
     t = SLANTS[slnt]
     order = [".notdef", "space"]
     cmap = {0x20: "space", 0xA0: "space"}
     glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
     space_adv = round(0.3 * g.wn + 120)
     adv = {".notdef": 500, "space": space_adv}
-    strokes_of = {name: fn(g) for name, (_, fn) in GLYPHS.items()}
-    placed = {name: spacing(name, st, p) for name, st in strokes_of.items()}
+    clamped = []
+    placed = {name: place(name, fn(g), p, g, n_adv, clamped) for name, (_, fn) in GLYPHS.items()}
+    if clamped and slnt == 0 and shdw == 0:
+        print(f"wght {wght}: width class out of scale range, clamped:", " ".join(clamped))
     for group in FIXED_WIDTH:  # one advance for the group, each glyph centred in it
-        width = max(placed[n][1] for n in group)
+        width = max(placed[n][2] for n in group)
         for n in group:
-            dx, advance = placed[n]
-            placed[n] = (dx + (width - advance) / 2, width)
+            st, dx, advance = placed[n]
+            placed[n] = (st, dx + (width - advance) / 2, width)
     for name, (uni, _) in GLYPHS.items():
-        strokes = strokes_of[name]
-        dx, advance = placed[name]
+        strokes, dx, advance = placed[name]
         glyf[name] = to_glyph(outline(strokes, p, dx, t))
         glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=SHADOWS[shdw]))
         adv[name] = adv[name + ".shadow"] = advance
