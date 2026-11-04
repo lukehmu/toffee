@@ -5,6 +5,7 @@
 """Build Toffee: a COLRv1 variable font (wght, slnt, SHDW) from glyphs.py skeletons."""
 
 import math
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -35,6 +36,7 @@ SHADOW_DIR = (0.66, -0.75)
 SHADOW_MAX = 1000
 VERSION = 1.0
 VERSION_STRING = "Version 1.000"
+RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
 FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater"]]
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
@@ -236,7 +238,7 @@ def build_master(wght, slnt, shdw):
         usWeightClass=wght,
         sTypoAscender=930, sTypoDescender=-300, sTypoLineGap=0,
         usWinAscent=1000, usWinDescent=300,  # replaced on the VF by the real extremes over all masters
-        sxHeight=540, sCapHeight=730, fsSelection=0x80 | 0x40,
+        sxHeight=g.X, sCapHeight=g.C, fsSelection=0x80 | 0x40,
         achVendID="NONE", version=4,
     )
     fb.setupPost()
@@ -248,6 +250,9 @@ def build_master(wght, slnt, shdw):
 
 
 def main():
+    # Reproducible output: fontTools stamps head.created/modified from SOURCE_DATE_EPOCH when it's set.
+    # Default it to this version's release date, so an unchanged source rebuilds to identical bytes.
+    os.environ.setdefault("SOURCE_DATE_EPOCH", str(RELEASE_EPOCH))
     MASTERS.mkdir(exist_ok=True)
     OUT.mkdir(exist_ok=True)
     doc = DesignSpaceDocument()
@@ -324,10 +329,19 @@ def main():
     ]:
         vf["name"].setName(text, nid, 3, 1, 0x409)
     vf["OS/2"].fsType = 0  # installable embedding
-    vf["name"].setName("Black", 2, 3, 1, 0x409)
-    vf["name"].setName(f"{FAMILY}-Black", 6, 3, 1, 0x409)
-    vf["name"].setName(f"{FAMILY} Black", 4, 3, 1, 0x409)
-    vf["name"].setName(FAMILY, 25, 3, 1, 0x409)
+    # The default instance is Black, which isn't one of the four RIBBI styles: legacy menus get
+    # "Toffee Black" / Regular (IDs 1/2), and typographic family/subfamily go in IDs 16/17.
+    for nid, text in [
+        (1, f"{FAMILY} Black"),
+        (2, "Regular"),
+        (3, f"{VERSION:.3f};NONE;{FAMILY}-Black"),
+        (4, f"{FAMILY} Black"),
+        (6, f"{FAMILY}-Black"),
+        (16, FAMILY),
+        (17, "Black"),
+        (25, FAMILY),
+    ]:
+        vf["name"].setName(text, nid, 3, 1, 0x409)
     os2 = vf["OS/2"]
     os2.recalcCodePageRanges(vf)
     os2.usWinAscent = max(m["head"].yMax for m in masters)

@@ -27,13 +27,12 @@ Not applied: wn 360 (the photo's narrower 900; a judgment call), and kerning.
 
 Measured on 2026-11-04. Toffee is the **snapshot of commit `624a609`** (the build of 19:50, after the
 `refine/lower` merge). Other sessions were changing the repo while this ran: the earlier build had an n
-advance of 679 rather than 724. The snapshot (font, `glyphs.py`, `build.py`) is in `research/snap/`. All
-numbers are in units of 1000 UPM, from monochrome face glyphs at SHDW 0 and slnt 0, instanced with
-`fontTools.varLib.instancer`.
+advance of 679 rather than 724. All numbers are in units of 1000 UPM, from monochrome face glyphs at SHDW 0
+and slnt 0, instanced with `fontTools.varLib.instancer`.
 
-Files: scripts in `research/scripts/` (`measure.py` takes nonzero-winding scanlines through flattened
-outlines, `report.py` builds the tables, `photo.py` scanlines the photo), raw data in `research/m.json`,
-the visual comparison in `research/compare.html` with its screenshot `research/compare.png`.
+The measurements came from nonzero-winding horizontal scanlines through flattened outlines. The scripts,
+the raw data and the HTML page behind the screenshot were throwaway and are not in this repo. The
+screenshot is [`compare.png`](compare.png), downscaled.
 
 ## 1. Reference picks
 
@@ -48,10 +47,10 @@ the visual comparison in `research/compare.html` with its screenshot `research/c
 | **Grandstander** (wght VF) | Playful, rounded, with a weight axis from 100 to 900 | quirky: H narrower than n, o lower than the x-height, the same advances at every weight |
 
 Rejected after rendering: **Corben Bold** (bracketed serifs, very wide, n/x 1.52), **Lilita One** (flat-sided
-and condensed, no balls), **Chewy** (not in `ofl/`; Apache-licensed). All of them are still drawn in
-`compare.html`.
+and condensed, no balls), **Chewy** (not in `ofl/`; Apache-licensed). All of them are still drawn in the
+screenshot.
 
-The photo was measured as well (`scripts/photo.py`, cream-pixel scanlines on the full-resolution JPG). In
+The photo was measured as well (cream-pixel scanlines on the full-resolution JPG). In
 pixels: cap B 403, x-height ≈317, e's vertical side 113, e's top/bottom strokes 95/99, e's crossbar 47,
 e's ink width 284, B's ink width 319, B's stem 119, B's counter 73, slant ≈11°, gaps between letters 18–54.
 As ratios, the photo has:
@@ -509,7 +508,7 @@ counter's centre.
 | 8 | 0.96 | 0.89–1.17 | 1.00 | 1.06 | 1.02 | +0.10 | -0.19 | -0.02 |
 | 9 ⚠ | 0.96 | 0.80–1.08 | 0.96 | 1.10 | 1.03 | +0.15 | -0.28 | -0.12 |
 
-Toffee's per-glyph sidebearings are uniform: 38 straight and 28 round at every weight (raw data in `m.json`).
+Toffee's per-glyph sidebearings are uniform: 38 straight and 28 round at every weight.
 
 
 ## 3. Where Toffee is out of family, or inconsistent with itself

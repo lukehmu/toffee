@@ -14,7 +14,7 @@
     font-display: block;
   }
   :root {
-    --wght: 900; --slnt: -10; --shdw: 600; --size: 160px; --lh: .95; --track: 0em;
+    --wght: 900; --slnt: -10; --shdw: 600; --size: clamp(56px, 17vw, 160px); --lh: .95; --track: 0em;
     --bg: #e2482a; --ui: #2a1316; --ui-ink: #f3ecd1; --ui-dim: #c9b9a4;
   }
   * { box-sizing: border-box; }
@@ -25,7 +25,10 @@
   .panel { position: sticky; top: 0; z-index: 2; background: var(--ui); color: var(--ui-ink);
            padding: 12px 16px; box-shadow: 0 2px 0 rgba(0,0,0,.15); }
   .panel-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
-  .brand { font-family: Toffee; font-size: 28px; font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 0; }
+  .brand { font-family: Toffee; font-size: 28px; font-weight: normal; margin: 0; line-height: 1.1;
+           font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 0; }
+  .notice { display: none; margin: 16px 16px 0; padding: 10px 14px; border-radius: 6px; background: #fff3c4; color: #2a1316; font-size: 14px; }
+  .no-colrv1 .notice { display: block; }
   .panel-head nav { display: flex; gap: 14px; font-size: 13px; color: var(--ui-dim); margin-left: auto; }
   .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 20px; }
   .ctl { display: grid; grid-template-columns: 70px 1fr 48px; align-items: center; gap: 8px; font-size: 13px; }
@@ -46,8 +49,10 @@
   .stage { padding: 48px 16px 0; min-height: 60vh; }
   .tester { font-family: Toffee; font-size: var(--size); line-height: var(--lh); letter-spacing: var(--track);
             font-variation-settings: "wght" var(--wght), "slnt" var(--slnt), "SHDW" var(--shdw);
-            outline: none; overflow-wrap: anywhere; white-space: pre-wrap; text-align: var(--align, left);
+            overflow-wrap: break-word; white-space: pre-wrap; text-align: var(--align, left);
             padding-bottom: calc(var(--shdw) * var(--size) / 1000 * .8 + 40px); caret-color: currentColor; }
+  .tester:focus { outline: none; }
+  .tester:focus-visible { outline: 2px dashed currentColor; outline-offset: 8px; }
   .hint { font-size: 13px; opacity: .7; margin: 0 0 8px; }
 
   .css { margin: 0 16px 40px; padding: 12px 14px; background: rgba(0,0,0,.18); color: #fff; border-radius: 6px;
@@ -64,6 +69,7 @@
   footer { padding: 16px 16px 40px; font-size: 13px; opacity: .8; }
 
   @media (max-width: 600px) {
+    .panel { position: static; }  /* sticky, it would cover a third of a phone screen */
     .ctl { grid-template-columns: 60px 1fr 40px; }
     .stage { padding-top: 28px; }
     .toggles { margin-left: 0; }
@@ -73,7 +79,7 @@
 <body>
 <div class="panel">
   <div class="panel-head">
-    <span class="brand">Toffee</span>
+    <h1 class="brand">Toffee</h1>
     <nav>
       <a href="fonts/Toffee[SHDW,slnt,wght].woff2" download>woff2</a>
       <a href="fonts/Toffee[SHDW,slnt,wght].ttf" download>ttf</a>
@@ -86,7 +92,7 @@
     <label class="ctl"><span>Shadow</span><input type="range" min="0" max="1000" step="1" value="600" data-var="--shdw"><output>600</output></label>
     <label class="ctl"><span>Size</span><input type="range" min="16" max="400" step="1" value="160" data-var="--size" data-unit="px"><output>160</output></label>
     <label class="ctl"><span>Leading</span><input type="range" min="0.7" max="1.8" step="0.01" value="0.95" data-var="--lh"><output>0.95</output></label>
-    <label class="ctl"><span>Tracking</span><input type="range" min="-0.1" max="0.3" step="0.005" value="0" data-var="--track" data-unit="em"><output>0</output></label>
+    <label class="ctl"><span>Tracking</span><input type="range" min="-0.02" max="0.3" step="0.005" value="0" data-var="--track" data-unit="em"><output>0</output></label>
   </div>
   <div class="colours">
     <label>Face <input type="color" id="face" value="#f3ecd1"></label>
@@ -101,9 +107,13 @@
   </div>
 </div>
 
+<p class="notice" role="status">This browser can't draw COLRv1 colour fonts (Safari and iOS can't yet), so you're
+  seeing Toffee's plain face without its outline and shadow. Open this page in Chrome, Edge or Firefox to see it in colour.</p>
+
 <div class="stage">
-  <p class="hint">Click the text to type.</p>
-  <div class="tester" id="tester" contenteditable="true" spellcheck="false">Best year yet</div>
+  <p class="hint" id="hint">Click the text to type.</p>
+  <div class="tester" id="tester" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true"
+       aria-label="Type to preview Toffee" aria-describedby="hint">Best year yet</div>
 </div>
 
 <div class="css-head"><span>CSS for this setting</span><button id="copy">Copy</button></div>
@@ -114,7 +124,8 @@
 
 <footer>Toffee is a COLRv1 variable font with axes <code>wght</code> 300–900, <code>slnt</code> −12–0 and <code>SHDW</code> 0–1000.
   Licensed under the <a href="https://openfontlicense.org">SIL Open Font License 1.1</a>.
-  Colour needs a COLRv1 renderer (Chrome, Edge, Firefox, Safari 17+); elsewhere you get the plain face.</footer>
+  The outline and shadow need COLRv1 colour-font support: Chrome and Edge 98+ and Firefox 107+ have it, but Safari
+  and iOS don't yet, so they show the plain face.</footer>
 
 <script>
   const root = document.documentElement;
@@ -174,7 +185,7 @@ h1 {
   PRESETS.forEach((p, i) => {
     const b = document.createElement("button");
     b.className = "preset";
-    b.title = `Preset ${i + 1}`;
+    b.title = b.ariaLabel = `Colour preset ${i + 1}`;
     b.textContent = "a";
     b.style.background = p.bg;
     b.style.color = p.face;
@@ -202,6 +213,11 @@ h1 {
     b.addEventListener("click", () => { tester.textContent += c; });
     grid.append(b);
   }
+
+  // COLRv1 support: browsers without CSS font-tech() or without COLRv1 get a notice (Safari has neither).
+  try {
+    if (!CSS.supports("font-tech(color-COLRv1)")) root.classList.add("no-colrv1");
+  } catch { root.classList.add("no-colrv1"); }
 
   applyColours();
 </script>
