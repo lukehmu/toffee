@@ -69,8 +69,11 @@ def geo(p):
         # Natural proportions only: build.py rescales each glyph's skeleton to its width class (SPACING).
         wn=375,
         dot=1.0,  # terminal-ball scale (circle radius = dot * a); constant relative to the pen
-        idot=1.58 - 0.0046 * a,  # i/j dots and punctuation: relatively bigger at light weights
-        igap=155 - a,  # x-height to the i-dot
+        # Dot radius = scale * a. Each radius is linear in a (c0 + c1*a), so the two weight masters
+        # interpolate it exactly; a scale linear in a would make the radius quadratic.
+        idot=(31.6 + 0.539 * a) / a,  # i/j dot: radius 51 at 300, 92 at 900; top stays at the ascender
+        igap=133 - 0.92 * a,  # x-height to the i-dot: 100 at 300, 30 at 900
+        pdot=(24 + 0.75 * a) / a,  # period, comma, colon and quote balls: radius 51 at 300, 108 at 900
     )
 
 
@@ -646,56 +649,56 @@ def _9(g):
 
 
 def ball(g, x, y, s=1.0):
-    return DOT(x, y + 0, g.idot * s)
+    return DOT(x, y + 0, g.pdot * s)
 
 
 @glyph("period")
 def _period(g):
-    return [ball(g, 0, g.idot * g.a)]
+    return [ball(g, 0, g.pdot * g.a)]
 
 
 @glyph("comma")
 def _comma(g):
-    r = g.idot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.idot * 0.4, 1)])]
+    r = g.pdot * g.a
+    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.pdot * 0.4, 1)])]
 
 
 @glyph("colon")
 def _colon(g):
-    r = g.idot * g.a
+    r = g.pdot * g.a
     return [ball(g, 0, r), ball(g, 0, g.X - r)]
 
 
 @glyph("semicolon")
 def _semicolon(g):
-    r = g.idot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.idot * 0.4, 1)]), ball(g, 0, g.X - r)]
+    r = g.pdot * g.a
+    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.pdot * 0.4, 1)]), ball(g, 0, g.X - r)]
 
 
 @glyph("exclam")
 def _exclam(g):
-    r = g.idot * g.a
+    r = g.pdot * g.a
     return [LN(0, g.yC, 0, 2 * r + 120, 1.05, 0.7, 0.3, 0.3), ball(g, 0, r)]
 
 
 @glyph("question")
 def _question(g):
-    r = g.idot * g.a
+    r = g.pdot * g.a
     w = g.wn * 0.95
     rq = 0.2 * g.C
     yq = g.C + g.ov - g.b - rq
     return [
-        S(ARC(w / 2, yq, w / 2, rq, 160, -90, g.idot * 1.05, 1, 0.8, 0), LN(w / 2, yq - rq, w / 2, 2 * r + 120, 1, 0.8)),
+        S(ARC(w / 2, yq, w / 2, rq, 160, -90, g.pdot * 1.05, 1, 0.8, 0), LN(w / 2, yq - rq, w / 2, 2 * r + 120, 1, 0.8)),
         ball(g, w / 2, r),
     ]
 
 
 def tick(g, x, ytop, flip=False):
     """A comma-shaped quote: ball at top, tail going down (or ball at bottom, tail up)."""
-    r = g.idot * g.a
+    r = g.pdot * g.a
     if flip:
-        return S([(x - r * 0.15, ytop, g.idot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.idot))
-    return S(DOT(x, ytop - r, g.idot), [(x + r * 0.15, ytop - r * 2.6, g.idot * 0.4, 1)])
+        return S([(x - r * 0.15, ytop, g.pdot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.pdot))
+    return S(DOT(x, ytop - r, g.pdot), [(x + r * 0.15, ytop - r * 2.6, g.pdot * 0.4, 1)])
 
 
 @glyph("quotesingle")
@@ -721,13 +724,13 @@ def _ql(g):
 
 @glyph("quotedblright", 0x201D)
 def _qdr(g):
-    d = 2 * g.a * g.idot + 70
+    d = 2 * g.a * g.pdot + 70
     return [tick(g, 0, g.C), tick(g, d, g.C)]
 
 
 @glyph("quotedblleft", 0x201C)
 def _qdl(g):
-    d = 2 * g.a * g.idot + 70
+    d = 2 * g.a * g.pdot + 70
     return [tick(g, 0, g.C, flip=True), tick(g, d, g.C, flip=True)]
 
 
@@ -924,19 +927,19 @@ def _at(g):
 
 @glyph("ellipsis", 0x2026)
 def _ellipsis(g):
-    r = g.idot * g.a
+    r = g.pdot * g.a
     d = 2 * r + 70
     return [ball(g, 0, r), ball(g, d, r), ball(g, 2 * d, r)]
 
 
 @glyph("bullet", 0x2022)
 def _bullet(g):
-    return [DOT(0, 0.48 * g.X, g.idot * 1.15)]
+    return [DOT(0, 0.48 * g.X, g.pdot * 1.15)]
 
 
 @glyph("periodcentered", 0x00B7)
 def _middot(g):
-    return [ball(g, 0, 0.48 * g.X - g.idot * g.a)]
+    return [ball(g, 0, 0.48 * g.X - g.pdot * g.a)]
 
 
 @glyph("asciitilde")
@@ -1031,3 +1034,5 @@ SPACING = {
     "eight": (0.96, R, R), "nine": (0.96, R, R),
 }
 PUNCT_SIDE = 0.8
+# Composite glyphs (accented letters) space like their base letter: {"eacute": "e", ...}.
+BASE_OF: dict[str, str] = {}

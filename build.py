@@ -19,7 +19,8 @@ from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple
 from fontTools.ttLib.tables.otTables import PaintFormat
 from fontTools import varLib
 
-from glyphs import GLYPHS, PUNCT_SIDE, SPACING, geo
+from glyphs import BASE_OF, GLYPHS, PUNCT_SIDE, SPACING, geo
+from kern import kern_feature
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "fonts"
@@ -128,7 +129,7 @@ def place(name, strokes, p, g, n_adv, clamped):
     A side marked ("T", ratio) is measured only inside the main band (x-height, or cap height for
     capitals), so tails, hooks and descender flicks overhang into the neighbour's space.
     """
-    spec = SPACING.get(name)
+    spec = SPACING.get(name) or SPACING.get(BASE_OF.get(name, ""))
     if spec is None:
         x0, x1 = ink_x(strokes, p)
         side = max(PUNCT_SIDE * p.sb, p.min_sb)
@@ -239,6 +240,10 @@ def build_master(wght, slnt, shdw):
         achVendID="NONE", version=4,
     )
     fb.setupPost()
+    faces = {n: outline(placed[n][0], p, placed[n][1], 0.0) for n in GLYPHS}  # upright, at final x
+    fea = kern_feature(faces, {n: adv[n] for n in GLYPHS}, p, g)
+    if fea:
+        fb.addOpenTypeFeatures(fea)
     return fb.font
 
 
