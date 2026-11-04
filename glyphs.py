@@ -652,10 +652,10 @@ def _question(g):
 
 def tick(g, x, ytop, flip=False):
     """A comma-shaped quote: ball at top, tail going down (or ball at bottom, tail up)."""
-    r = g.dot * g.a * 0.85
+    r = g.dot * g.a
     if flip:
-        return S([(x - r * 0.15, ytop, g.dot * 0.35, 1)], DOT(x, ytop - r * 1.6, g.dot * 0.85))
-    return S(DOT(x, ytop - r, g.dot * 0.85), [(x + r * 0.15, ytop - r * 2.6, g.dot * 0.35, 1)])
+        return S([(x - r * 0.15, ytop, g.dot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.dot))
+    return S(DOT(x, ytop - r, g.dot), [(x + r * 0.15, ytop - r * 2.6, g.dot * 0.4, 1)])
 
 
 @glyph("quotesingle")
