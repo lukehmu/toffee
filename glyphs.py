@@ -1032,7 +1032,404 @@ SPACING = {
     "zero": (0.96, R, R), "one": (0.67, 0.5, 1), "two": (0.92, R, 0.8), "three": (0.92, 0.6, R),
     "four": (0.96, 0.5, 1), "five": (0.92, 0.8, R), "six": (0.96, R, R), "seven": (0.92, 0.6, 0.5),
     "eight": (0.96, R, R), "nine": (0.96, R, R),
+    # accented letters with their own shapes; i and I composites measure only the stem (marks overhang)
+    "AE": (1.45, D, 0.8), "OE": (1.50, R, 0.8), "Oslash": (1.15, R, R), "Eth": (1.18, 0.4, R),
+    "Dcroat": (1.18, 0.4, R), "Thorn": (1.00, 1, 0.47), "Lslash": (0.95, 0.4, 0.6),
+    "ae": (1.45, R, R), "oe": (1.55, R, R), "oslash": (1.00, R, R), "eth": (1.00, R, R), "thorn": (1.00, 1, R),
+    "germandbls": (1.00, 1, R), "lslash": (0.55, 0.4, T), "dotlessi": (0.50, 1, 1),
+    "igrave": (0.50, T, T), "iacute": (0.50, T, T), "icircumflex": (0.50, T, T), "idieresis": (0.50, T, T),
+    "Igrave": (0.52, T, T), "Iacute": (0.52, T, T), "Icircumflex": (0.52, T, T), "Idieresis": (0.52, T, T),
 }
 PUNCT_SIDE = 0.8
 # Composite glyphs (accented letters) space like their base letter: {"eacute": "e", ...}.
-BASE_OF: dict[str, str] = {}
+BASE_OF: dict[str, str] = {
+    "Agrave": "A", "Aacute": "A", "Acircumflex": "A", "Atilde": "A", "Adieresis": "A", "Aring": "A", "Aogonek": "A",
+    "Cacute": "C", "Ccaron": "C", "Ccedilla": "C",
+    "Dcaron": "D",
+    "Egrave": "E", "Eacute": "E", "Ecircumflex": "E", "Edieresis": "E", "Ecaron": "E", "Eogonek": "E",
+    "Igrave": "I", "Iacute": "I", "Icircumflex": "I", "Idieresis": "I",
+    "Lcaron": "L",
+    "Nacute": "N", "Ntilde": "N", "Ncaron": "N",
+    "Ograve": "O", "Oacute": "O", "Ocircumflex": "O", "Otilde": "O", "Odieresis": "O", "Ohungarumlaut": "O",
+    "Racute": "R", "Rcaron": "R",
+    "Sacute": "S", "Scaron": "S",
+    "Tcaron": "T",
+    "Ugrave": "U", "Uacute": "U", "Ucircumflex": "U", "Udieresis": "U", "Uring": "U", "Uhungarumlaut": "U",
+    "Yacute": "Y", "Ydieresis": "Y",
+    "Zacute": "Z", "Zcaron": "Z", "Zdotaccent": "Z",
+    "agrave": "a", "aacute": "a", "acircumflex": "a", "atilde": "a", "adieresis": "a", "aring": "a", "aogonek": "a",
+    "cacute": "c", "ccaron": "c", "ccedilla": "c",
+    "dcaron": "d", "dcroat": "d",
+    "egrave": "e", "eacute": "e", "ecircumflex": "e", "edieresis": "e", "ecaron": "e", "eogonek": "e",
+    "igrave": "i", "iacute": "i", "icircumflex": "i", "idieresis": "i",
+    "lcaron": "l",
+    "nacute": "n", "ntilde": "n", "ncaron": "n",
+    "ograve": "o", "oacute": "o", "ocircumflex": "o", "otilde": "o", "odieresis": "o", "ohungarumlaut": "o",
+    "racute": "r", "rcaron": "r",
+    "sacute": "s", "scaron": "s",
+    "tcaron": "t",
+    "ugrave": "u", "uacute": "u", "ucircumflex": "u", "udieresis": "u", "uring": "u", "uhungarumlaut": "u",
+    "yacute": "y", "ydieresis": "y",
+    "zacute": "z", "zcaron": "z", "zdotaccent": "z",
+}
+
+
+# ---------------------------------------------------------------- accents
+# Marks are strokes of the same pen at a smaller scale (radius linear in a, like the dots). Each sits in an ink
+# band above the x-height (lowercase) or a flatter, lower one above the cap height (capitals), centred on the
+# base's optical middle. Composites call the base glyph's function and append the mark strokes.
+
+
+def _ac_zone(g, cap, narrow=False):
+    """Mark geometry: skeleton band (lo, hi), pen radius r, scale s, half-width hw, dot radius rd."""
+    k = 0.85 if cap else 1.0
+    r = k * (6.7 + 0.618 * g.a)  # mark pen radius: 29 at 300, 76 at 900 (lowercase)
+    if cap:
+        bot, top = g.C + 90 - 0.6 * g.a, 900 + 0.2 * g.a
+        hw = 95 + 0.5 * g.a
+    else:
+        bot, top = g.X + 118 - 0.8 * g.a, 810 + 0.1 * g.a
+        hw = 80 + 0.5 * g.a
+    lo, hi = bot + r, top - r
+    rd = (0.88 if cap else 1.0) * (27.1 + 0.526 * g.a)  # dieresis/dot radius: 46 at 300, 86 at 900
+    if narrow:  # over a lone stem (i, I): marks stay close to its width
+        hw, rd = hw * 0.72, rd * 0.85
+    return SimpleNamespace(
+        lo=lo, hi=hi, mid=(lo + hi) / 2, bot=bot, top=top, r=r, s=r / g.a, hw=hw, rd=rd, narrow=narrow, cap=cap
+    )
+
+
+def _ac_acute(g, cx, z, flip=False):
+    d = -1 if flip else 1
+    w = 0.32 * z.hw
+    return [LN(cx - d * w, z.lo, cx + d * w, z.hi, z.s * 0.75, z.s * 1.05, 0.4, 1)]
+
+
+def _ac_grave(g, cx, z):
+    return _ac_acute(g, cx, z, flip=True)
+
+
+def _ac_circumflex(g, cx, z, flip=False):
+    y0, y1 = (z.hi, z.lo) if flip else (z.lo, z.hi)
+    s = z.s * 0.9
+    return [S(LN(cx - z.hw, y0, cx, y1, s, s, 0.7, 0.4), LN(cx, y1, cx + z.hw, y0, s, s, 0.4, 0.7))]
+
+
+def _ac_caron(g, cx, z):
+    return _ac_circumflex(g, cx, z, flip=True)
+
+
+def _ac_tilde(g, cx, z):
+    w = z.hw * 1.05
+    h = (z.hi - z.lo) / 2 + 6
+    s = z.s * 0.85
+    return [
+        S(
+            ARC(cx - w / 2, z.mid, w / 2, h, 180, 0, s, s, 0.8, 0.3),
+            ARC(cx + w / 2, z.mid, w / 2, h, 180, 360, s, s, 0.3, 0.8)[1:],
+        )
+    ]
+
+
+def _ac_dieresis(g, cx, z):
+    y = max(z.bot + z.rd, (z.bot + z.top) / 2 - 8)
+    d = z.rd + (8 + 0.1 * g.a if z.narrow else 18 + 0.15 * g.a)
+    return [DOT(cx - d, y, z.rd / g.a), DOT(cx + d, y, z.rd / g.a)]
+
+
+def _ac_dotaccent(g, cx, z):
+    r = z.rd * 1.05
+    return [DOT(cx, max(z.bot + r, (z.bot + z.top) / 2 - 8), r / g.a)]
+
+
+def _ac_ring(g, cx, z):
+    s = z.s * 0.62
+    bot, top = (z.bot, z.top + 10) if z.cap else (z.bot - 4, z.top + 20)  # a ring needs height for its counter
+    ry = (top - bot) / 2 - s * g.b
+    rx = ry * 0.6 + 40 + 0.15 * g.a
+    return [ARC(cx, (bot + top) / 2, rx, ry, 90, 450, s, s, 0.3, 0.3)]
+
+
+def _ac_macron(g, cx, z):
+    return [LN(cx - z.hw * 0.85, z.mid, cx + z.hw * 0.85, z.mid, z.s * 0.85, z.s * 0.85, 0.6, 0.6)]
+
+
+def _ac_hungarumlaut(g, cx, z):
+    d = 0.42 * z.hw
+    return [*_ac_acute(g, cx - d, z), *_ac_acute(g, cx + d, z)]
+
+
+def _ac_cedilla(g, cx, z):
+    s = z.s * 0.85
+    rh = 38 + 0.35 * g.a
+    yc = -95 - 0.3 * g.a
+    return [S(LN(cx - 8, 40, cx + 6, yc + rh * 0.55, s, s), ARC(cx - 10, yc, rh, rh * 0.75, 50, -150, s, z.s * 1.05, 0, 1))]
+
+
+def _ac_ogonek(g, cx, z):
+    """Hook hanging from the base's bottom at cx, curling left and back right."""
+    s = z.s * 0.85
+    ro = 45 + 0.35 * g.a
+    yo = -100 - 0.25 * g.a
+    return [ARC(cx, yo, ro, -yo + 30, 90, 300, s, z.s * 1.05, 0, 1)]
+
+
+def _ac_commacaron(g, x, ytop):
+    """The caron of ď ľ ť Ľ: a small comma beside the stem's top."""
+    r = 1.15 * _ac_zone(g, False).r
+    x += r
+    # The tail stays above the x-height, so spacing's x-height band ignores the comma.
+    return [S(DOT(x, ytop - r, r / g.a), [(x - 0.1 * r, ytop - 2 * r - 60 + 0.5 * g.a, 0.35 * r / g.a, 1)])]
+
+
+_AC_DRAW = {
+    "grave": _ac_grave, "acute": _ac_acute, "circumflex": _ac_circumflex, "caron": _ac_caron,
+    "tilde": _ac_tilde, "dieresis": _ac_dieresis, "dotaccent": _ac_dotaccent, "ring": _ac_ring,
+    "macron": _ac_macron, "hungarumlaut": _ac_hungarumlaut, "cedilla": _ac_cedilla, "ogonek": _ac_ogonek,
+}
+
+
+def _ac_xspan(strokes):
+    xs = [x for st in strokes for x, *_ in st]
+    return min(xs), max(xs)
+
+
+# A base's optical middle where the skeleton extent misleads (tails, hooks, open sides).
+_AC_MID = {
+    "a": lambda g: _lc_rx(g),
+    "u": lambda g: _lc_nw(g) / 2,
+    "y": lambda g: _lc_nw(g) / 2,
+    "c": lambda g: (_lc_rx(g) - 5) * 0.95,
+    "C": lambda g: g.wn * 0.68 * 0.95,
+    "r": lambda g: g.wn * 0.42 * 0.75,
+    "dotlessi": lambda g: 0,
+    "I": lambda g: 0,
+}
+# Where an ogonek hangs from (x of its top).
+_AC_FOOT = {
+    "a": lambda g: 2 * _lc_rx(g) + 10,
+    "e": lambda g: 1.5 * (_lc_rx(g) + 5),
+    "A": lambda g: g.wn * 1.3 - 30,
+    "E": lambda g: g.wn * 0.75,
+}
+
+
+def _ac_composite(base, mark):
+    def fn(g):
+        strokes = GLYPHS[base][1](g)
+        mid = _AC_MID.get(base)
+        cx = mid(g) if mid else sum(_ac_xspan(strokes)) / 2
+        z = _ac_zone(g, base[0].isupper(), base in ("dotlessi", "I"))
+        if mark == "ogonek":
+            cx = _AC_FOOT[base](g)
+        return [*strokes, *_AC_DRAW[mark](g, cx, z)]
+
+    return fn
+
+
+def _ac_comma_composite(base):
+    def fn(g):
+        strokes = GLYPHS[base][1](g)
+        if base == "d":
+            x, top = 2 * _lc_rx(g), g.A
+        elif base == "L":
+            x, top = 0, g.C
+        else:  # l, t
+            x, top = 0, g.A
+        return [*strokes, *_ac_commacaron(g, x + g.a + 25, top)]
+
+    return fn
+
+
+@glyph("dotlessi")
+def _dotlessi(g):
+    return [LN(0, g.yx, 0, g.yb)]
+
+
+# mark -> bases ("i" means the dotless i). Names are base + mark (AGL), e.g. Aacute, idieresis.
+_AC_SETS = {
+    "grave": "AEIOUaeiou",
+    "acute": "AEIOUYaeiouyCcNnRrSsZz",
+    "circumflex": "AEIOUaeiou",
+    "tilde": "ANOano",
+    "dieresis": "AEIOUYaeiouy",
+    "ring": "AaUu",
+    "caron": "CcDEeNnRrSsTZz",
+    "cedilla": "Cc",
+    "ogonek": "AaEe",
+    "dotaccent": "Zz",
+    "hungarumlaut": "OoUu",
+}
+for _mark, _bases in _AC_SETS.items():
+    for _b in _bases:
+        _name = _b + _mark
+        GLYPHS[_name] = (ord(toUnicode(_name)), _ac_composite("dotlessi" if _b == "i" else _b, _mark))
+for _b in "dltL":
+    GLYPHS[_b + "caron"] = (ord(toUnicode(_b + "caron")), _ac_comma_composite(_b))
+
+
+# Spacing marks: the lowercase variant, centred on 0.
+def _ac_spacing(mark):
+    def fn(g):
+        return _AC_DRAW[mark](g, 0, _ac_zone(g, False))
+
+    return fn
+
+
+for _mark in ("acute", "dieresis", "cedilla", "ring", "macron", "caron", "dotaccent", "ogonek", "hungarumlaut"):
+    GLYPHS[_mark] = (ord(toUnicode(_mark)), _ac_spacing(_mark))
+
+
+# Letters with their own shapes.
+
+
+@glyph("AE")
+def _AE(g):
+    wa, we = g.wn * 0.72, g.wn * 0.78
+    ym = 0.5 * g.C
+    return [
+        LN(0, g.yb, wa, g.yC, 1, 0.9),
+        S(LN(wa + we, g.yC, wa, g.yC), LN(wa, g.yC, wa, g.yb), LN(wa, g.yb, wa + we, g.yb)),
+        LN(wa, ym, wa + we * 0.82, ym, 0.82),
+        LN(wa * 0.3, 0.26 * g.C, wa, 0.26 * g.C, 0.78),
+    ]
+
+
+@glyph("ae")
+def _ae(g):
+    # Single-storey a: its straight stem tells æ from œ, so the e springs from the stem instead of rounding it.
+    rx = _lc_rx(g) * 0.88
+    xs = 2 * rx
+    re = _lc_rx(g) * 0.88 + 5
+    xe = xs + re * 0.8
+    ybar = g.cy + 0.03 * g.X
+    return [
+        bowl_left(g, xs, rx, g.cy, g.ry),
+        LN(xs, g.yx, xs, g.yb),
+        LN(xs, ybar, xe + re, ybar, 0.65),
+        ARC(xe, g.cy, re, g.ry, 5, 125, 1, 0.6),
+        ARC(xe, g.cy, re, g.ry, 235, 315, 0.6, g.dot, 0, 0.8),
+    ]
+
+
+@glyph("OE")
+def _OE(g):
+    rx = g.wn * 0.6
+    xe = rx * 1.5
+    we = g.wn * 0.72
+    ry = g.ryC - g.ovC
+    ym = 0.5 * g.C
+    return [
+        S(LN(xe + we, g.yC, rx, g.yC), ARC(rx, g.cyC, rx, ry, 90, 270), LN(rx, g.yb, xe + we, g.yb)),
+        LN(xe, g.yC, xe, g.yb),
+        LN(xe, ym, xe + we * 0.82, ym, 0.82),
+    ]
+
+
+@glyph("oe")
+def _oe(g):
+    ro = _lc_rx(g) + 5
+    re = _lc_rx(g) + 5
+    xe = 2 * ro + re - 0.3 * g.a
+    ybar = g.cy + 0.03 * g.X
+    return [
+        ARC(ro, g.cy, ro, g.ry, 0, 360),
+        LN(xe - re, ybar, xe + re, ybar, 0.65),
+        S(ARC(xe, g.cy, re, g.ry, 5, 200), ARC(xe, g.cy, re, g.ry, 200, 315, 1, g.dot, 0, 0.8)[1:]),
+    ]
+
+
+@glyph("Oslash")
+def _Oslash(g):
+    rx = g.wn * 0.72
+    return [*_O(g), LN(rx * 0.1, g.yb - 50, rx * 1.9, g.yC + 50, 0.72)]
+
+
+@glyph("oslash")
+def _oslash(g):
+    rx = _lc_rx(g) + 10
+    return [*_o(g), LN(rx * 0.06, g.yb - 60, rx * 1.94, g.yx + 60, 0.72)]
+
+
+def _ac_eth_bar(g):
+    return LN(-g.wn * 0.2, 0.5 * g.C, g.wn * 0.36, 0.5 * g.C, 0.8)
+
+
+@glyph("Eth")
+def _Eth(g):
+    return [*_D(g), _ac_eth_bar(g)]
+
+
+@glyph("Dcroat")
+def _Dcroat(g):
+    return [*_D(g), _ac_eth_bar(g)]
+
+
+@glyph("dcroat")
+def _dcroat(g):
+    xs = 2 * _lc_rx(g)
+    y = (g.X + g.A) / 2 + 20
+    return [*_d(g), LN(xs - g.wn * 0.26, y, xs + g.wn * 0.2, y, 0.8)]
+
+
+@glyph("eth")
+def _eth(g):
+    rx = _lc_rx(g)
+    x0 = rx * 0.3
+    rys = g.yA - g.cy
+    px, py = at(x0, g.cy, 2 * rx - x0, rys, 60)
+    return [
+        ARC(rx, g.cy, rx, g.ry, 0, 360),
+        ARC(x0, g.cy, 2 * rx - x0, rys, 0, 110, 0.9, g.dot, 0, 0.8),
+        LN(px - g.wn * 0.27, py - 40, px + g.wn * 0.3, py + 45, 0.62),
+    ]
+
+
+@glyph("Thorn")
+def _Thorn(g):
+    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, g.wn * 1.0, 0.8 * g.C, 0.2 * g.C)]
+
+
+@glyph("thorn")
+def _thorn(g):
+    return [LN(0, g.yA, 0, g.yD), bowl_right(g, 0, _lc_rx(g), g.cy, g.ry)]
+
+
+@glyph("germandbls")
+def _germandbls(g):
+    ru, rl = g.wn * 0.3 + 0.2 * g.a, g.wn * 0.42 + 0.2 * g.a
+    ym = 0.6 * g.X + 90
+    top = g.A + g.ov - g.b
+    hu = (top - ym) / 2
+    hl = (ym - (g.b - g.ov)) / 2
+    cl = ru + 0.12 * g.wn
+    return [
+        S(LN(0, g.yb, 0, ym + hu), ARC(ru, ym + hu, ru, hu, 180, -90)[1:]),
+        S(LN(ru, ym, cl, ym), ARC(cl, ym - hl, rl, hl, 90, -125, 1, g.dot * 1.05, 0, 0.8)),
+    ]
+
+
+@glyph("Lslash")
+def _Lslash(g):
+    return [*_L(g), LN(-g.wn * 0.16, 0.34 * g.C, g.wn * 0.3, 0.6 * g.C, 0.72)]
+
+
+@glyph("lslash")
+def _lslash(g):
+    return [*_l(g), LN(-g.wn * 0.2, 0.4 * g.A, g.wn * 0.22, 0.62 * g.A, 0.72)]
+
+
+@glyph("multiply")
+def _multiply(g):
+    w = _fig_op_w(g) * 0.78
+    y = _fig_op_y(g)
+    return [LN(0, y - w / 2, w, y + w / 2, 0.85), LN(0, y + w / 2, w, y - w / 2, 0.85)]
+
+
+@glyph("divide")
+def _divide(g):
+    w = _fig_op_w(g)
+    y = _fig_op_y(g)
+    r = g.pdot * 0.8
+    d = r * g.a + g.b * 0.9 + 50
+    return [LN(0, y, w, y, 0.9), DOT(w / 2, y + d, r), DOT(w / 2, y - d, r)]
