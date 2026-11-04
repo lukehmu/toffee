@@ -111,10 +111,14 @@ def bowl_right(g, x0, rx, cy, ry, sj=0.45):
 
 
 def bowl_left(g, xs, rx, cy, ry, sj=0.45):
-    """Bowl attached to a stem on its right (a, d, g, q): full pen, tapering into the stem."""
+    """Bowl attached to a stem on its right (a, d, g, q): full pen, tapering into the stem.
+
+    The top neck keeps its top edge at the x-height all the way into the stem (the sample rises as the
+    pen shrinks), so the join never shows a notch between the neck and the stem's cap, slanted or not.
+    """
     cx = xs - rx
     return S(
-        ARC(cx, cy, rx, ry, 55, 85, sj, 1),
+        LN(xs - 0.5 * g.a, cy + ry + (1 - sj) * g.b, *at(cx, cy, rx, ry, 85), sj, 1),
         ARC(cx, cy, rx, ry, 85, 275)[1:],
         ARC(cx, cy, rx, ry, 275, 305, 1, sj)[1:],
     )
@@ -657,10 +661,27 @@ def _period(g):
     return [ball(g, 0, g.pdot * g.a)]
 
 
+def _gf_tail(g, x, y, flip=False):
+    """Curved tail from a ball at (x, y): sweeps down and left (comma, quoteright) or, flipped, up and
+    right (quoteleft). Starts at the ball's centre so the hull grows out of the ball."""
+    r = g.pdot * g.a
+    rt, rh = 0.9 * r, 1.9 * r
+    s0, s1 = g.pdot * 0.6, g.pdot * 0.2
+    if flip:
+        return ARC(x + rt, y, rt, rh, 180, 75, s0, s1, 1, 1)
+    return ARC(x - rt, y, rt, rh, 0, -105, s0, s1, 1, 1)
+
+
+def _gf_tail_drop(g):
+    """How far below the ball's centre the tail reaches (tip centre plus its radius)."""
+    r = g.pdot * g.a
+    return 1.9 * r * math.sin(math.radians(105)) + 0.2 * r
+
+
 @glyph("comma")
 def _comma(g):
     r = g.pdot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.pdot * 0.4, 1)])]
+    return [S(ball(g, 0, r), _gf_tail(g, 0, r))]
 
 
 @glyph("colon")
@@ -672,7 +693,7 @@ def _colon(g):
 @glyph("semicolon")
 def _semicolon(g):
     r = g.pdot * g.a
-    return [S(ball(g, 0, r), [(r * 0.15, -r * 1.2, g.pdot * 0.4, 1)]), ball(g, 0, g.X - r)]
+    return [S(ball(g, 0, r), _gf_tail(g, 0, r)), ball(g, 0, g.X - r)]
 
 
 @glyph("exclam")
@@ -694,11 +715,13 @@ def _question(g):
 
 
 def tick(g, x, ytop, flip=False):
-    """A comma-shaped quote: ball at top, tail going down (or ball at bottom, tail up)."""
+    """A comma-shaped quote: a 9 (ball at top, tail curling down-left) or, flipped, a 6 (ball at the
+    bottom, tail curling up-right). Both fill the same band from ytop down."""
     r = g.pdot * g.a
     if flip:
-        return S([(x - r * 0.15, ytop, g.pdot * 0.4, 1)], DOT(x, ytop - r * 1.6, g.pdot))
-    return S(DOT(x, ytop - r, g.pdot), [(x + r * 0.15, ytop - r * 2.6, g.pdot * 0.4, 1)])
+        yb = ytop - _gf_tail_drop(g)
+        return S(DOT(x, yb, g.pdot), _gf_tail(g, x, yb, flip=True))
+    return S(DOT(x, ytop - r, g.pdot), _gf_tail(g, x, ytop - r))
 
 
 @glyph("quotesingle")
@@ -724,13 +747,13 @@ def _ql(g):
 
 @glyph("quotedblright", 0x201D)
 def _qdr(g):
-    d = 2 * g.a * g.pdot + 70
+    d = 2 * g.a * g.pdot + 90
     return [tick(g, 0, g.C), tick(g, d, g.C)]
 
 
 @glyph("quotedblleft", 0x201C)
 def _qdl(g):
-    d = 2 * g.a * g.pdot + 70
+    d = 2 * g.a * g.pdot + 90
     return [tick(g, 0, g.C, flip=True), tick(g, d, g.C, flip=True)]
 
 
@@ -895,18 +918,21 @@ def _ampersand(g):
     xu = w * 0.38
     rl = 0.27 * g.C
     yl = g.b - g.ov + rl
-    sx, sy = at(xu, yu, w * 0.22, ru, 230)
+    rux = w * 0.22 + 0.3 * g.a  # the loop grows with the pen so its counter stays open at 900
+    su = 0.82 - 0.0022 * g.a  # loop stroke at the junctions: 0.74 at 300, 0.57 at 900
+    sx, sy = at(xu, yu, rux, ru, 230)
     ex, ey = at(w * 0.42, yl, w * 0.42, rl, 140)
     return [
         S(
-            LN(w, g.yb, sx, sy, 1, 0.9),
-            ARC(xu, yu, w * 0.22, ru, 230, -60, 0.9, 0.8),
+            LN(w, g.yb, sx, sy, 1, su),
+            ARC(xu, yu, rux, ru, 230, 90, su, 0.8),
+            ARC(xu, yu, rux, ru, 90, -60, 0.8, su)[1:],
         ),
         S(
             ARC(w * 0.42, yl, w * 0.42, rl, 140, 340, 1, 0.9),
             LN(*at(w * 0.42, yl, w * 0.42, rl, 340), w * 1.02, 0.45 * g.C, 0.9, 0.9),
         ),
-        LN(*at(xu, yu, w * 0.22, ru, -60), ex, ey, 0.8, 1),
+        LN(*at(xu, yu, rux, ru, -60), ex, ey, su, 1),
     ]
 
 
@@ -916,12 +942,17 @@ def _at(g):
     R = w / 2
     cy = 0.37 * g.C
     ry = 0.42 * g.C
-    rb = g.wn * 0.3 + g.a * 0.2
-    xs = R + rb * 0.85
+    rb = g.wn * 0.3 + g.a * 0.2  # inner bowl half-width
+    rbv = rb * 1.1
+    si = 0.557 - 0.00158 * g.a  # inner stroke: 0.5 at 300, 0.38 at 900, so the counter stays open
+    cxi = R - 0.45 * rb
+    xs = cxi + rb  # stem on the bowl's right edge, like the a
+    rt = 0.42 * rb
+    yt = cy - rbv * 0.55
     return [
-        ARC(R, cy, R, ry, -30, 320, 0.7, 0.7),
-        ARC(R, cy, rb, rb * 1.1, 0, 360, 0.5),
-        S(LN(xs, cy + rb, xs, cy - rb * 0.6, 0.5), ARC(xs + R * 0.2, cy - rb * 0.6, R * 0.2, rb * 0.4, 180, 330, 0.5, 0.5)),
+        ARC(R, cy, R, ry, -20, 305, 0.7, 0.7),
+        ARC(cxi, cy, rb, rbv, 0, 360, si),
+        S(LN(xs, cy + rbv * 0.8, xs, yt, si), ARC(xs + rt, yt, rt, rt * 0.8, 180, 270, si, si * 0.9)),
     ]
 
 
