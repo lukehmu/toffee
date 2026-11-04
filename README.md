@@ -14,3 +14,7 @@ Without COLR support you get a plain monochrome face.
     open specimen.html       # sliders + glyph grid; proof.html = proof sheet
 
 Glyphs are stroke skeletons in `glyphs.py`. `build.py` traces each stroke with an elliptical pen as a chain of convex hulls; the shadow is the same hulls swept along the shadow vector. Every master therefore has the same points, and there are no boolean operations.
+
+## Licence
+
+SIL Open Font License 1.1: see `OFL.txt`.

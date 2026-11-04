@@ -212,6 +212,13 @@ def main():
         ],
         elidedFallbackName=2,
     )
+    for nid, text in [
+        (0, "Copyright 2026 The Toffee Project Authors (https://github.com/lukehmu/toffee)"),
+        (13, "This Font Software is licensed under the SIL Open Font License, Version 1.1."),
+        (14, "https://openfontlicense.org"),
+    ]:
+        vf["name"].setName(text, nid, 3, 1, 0x409)
+    vf["OS/2"].fsType = 0  # installable embedding
     vf["name"].setName("Black", 2, 3, 1, 0x409)
     vf["name"].setName(f"{FAMILY}-Black", 6, 3, 1, 0x409)
     vf["name"].setName(f"{FAMILY} Black", 4, 3, 1, 0x409)
