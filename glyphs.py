@@ -307,15 +307,15 @@ def _A(g):
     w = g.wn * 1.3
     return [
         S(LN(0, g.yb, w / 2, g.yC, 1, 0.9), LN(w / 2, g.yC, w, g.yb, 0.9, 1)),
-        LN(w * 0.24, 0.3 * g.C, w * 0.76, 0.3 * g.C, 0.85),
+        LN(w * 0.22, 0.26 * g.C, w * 0.78, 0.26 * g.C, 0.78),
     ]
 
 
 @glyph("B")
 def _B(g):
-    w = g.wn * 1.08
-    ym = 0.54 * g.C
-    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, w * 0.9, g.yC, ym), d_bowl(g, 0, w, ym, g.yb)]
+    w = g.wn * 1.18
+    ym = 0.55 * g.C
+    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, w * 0.86, g.yC, ym), d_bowl(g, 0, w, ym, g.yb)]
 
 
 @glyph("C")
@@ -335,7 +335,7 @@ def _E(g):
     ym = 0.5 * g.C
     return [
         S(LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb), LN(0, g.yb, w, g.yb)),
-        LN(0, ym, w * 0.85, ym),
+        LN(0, ym, w * 0.82, ym, 0.82),
     ]
 
 
@@ -343,16 +343,18 @@ def _E(g):
 def _F(g):
     w = g.wn * 0.92
     ym = 0.48 * g.C
-    return [S(LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb)), LN(0, ym, w * 0.85, ym)]
+    return [S(LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb)), LN(0, ym, w * 0.82, ym, 0.82)]
 
 
 @glyph("G")
 def _G(g):
     rx = g.wn * 0.7
-    yb = 0.45 * g.C
+    ex, ey = at(rx, g.cyC, rx, g.ryC, 345)
     return [
-        ARC(rx, g.cyC, rx, g.ryC, 45, 360, g.dot * 1.1, 1, 0.7, 0),
-        LN(rx * 1.05, yb, 2 * rx, yb, 0.85),
+        S(
+            ARC(rx, g.cyC, rx, g.ryC, 45, 345, g.dot * 1.1, 1, 0.7, 0),
+            LN(ex, ey, rx * 0.95, ey, 1, 0.85),
+        )
     ]
 
 
@@ -403,7 +405,12 @@ def _M(g):
 @glyph("N")
 def _N(g):
     w = g.wn * 1.2
-    return [LN(0, g.yb, 0, g.yC), LN(0, g.yC, w, g.yb, 0.9), LN(w, g.yb, w, g.yC)]
+    ym = (g.yC + g.yb) / 2
+    return [
+        LN(0, g.yb, 0, g.yC),
+        S(LN(0, g.yC, w / 2, ym, 0.75, 1), LN(w / 2, ym, w, g.yb, 1, 0.75)),
+        LN(w, g.yb, w, g.yC),
+    ]
 
 
 @glyph("O")
@@ -422,7 +429,7 @@ def _Q(g):
     rx = g.wn * 0.72
     return [
         ARC(rx, g.cyC, rx, g.ryC, 0, 360),
-        LN(rx * 1.25, 0.25 * g.C, rx * 2.15, g.yb - 50, 0.6, 1, 0, 0.6),
+        LN(*at(rx, g.cyC, rx, g.ryC, 290), rx * 2.25, g.yb - 60, 0.85, 1, 0, 0.6),
     ]
 
 
@@ -432,7 +439,7 @@ def _R(g):
     return [
         LN(0, g.yC, 0, g.yb),
         d_bowl(g, 0, w, g.yC, 0.44 * g.C),
-        LN(w * 0.45, 0.44 * g.C, w + 15, g.yb, 0.8, 1),
+        LN(w * 0.42, 0.44 * g.C, w + 15, g.yb, 0.72, 1),
     ]
 
 
