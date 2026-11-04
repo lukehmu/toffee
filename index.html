@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toffee</title>
+<meta name="description" content="Toffee: a heavy, rounded COLRv1 variable display font with weight, slant and long-shadow axes.">
+<style id="palette-rule"></style>
+<style>
+  @font-face {
+    font-family: Toffee;
+    src: url("fonts/Toffee[SHDW,slnt,wght].woff2") format("woff2");
+    font-weight: 300 900;
+    font-display: block;
+  }
+  :root {
+    --wght: 900; --slnt: -10; --shdw: 600; --size: 160px; --lh: .95; --track: 0em;
+    --bg: #e2482a; --ui: #2a1316; --ui-ink: #f3ecd1; --ui-dim: #c9b9a4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ui); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: inherit; }
+
+  .panel { position: sticky; top: 0; z-index: 2; background: var(--ui); color: var(--ui-ink);
+           padding: 12px 16px; box-shadow: 0 2px 0 rgba(0,0,0,.15); }
+  .panel-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .brand { font-family: Toffee; font-size: 28px; font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 0; }
+  .panel-head nav { display: flex; gap: 14px; font-size: 13px; color: var(--ui-dim); margin-left: auto; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 20px; }
+  .ctl { display: grid; grid-template-columns: 70px 1fr 48px; align-items: center; gap: 8px; font-size: 13px; }
+  .ctl span { color: var(--ui-dim); }
+  .ctl output { font-variant-numeric: tabular-nums; text-align: right; }
+  input[type=range] { width: 100%; accent-color: #f3ecd1; }
+  .colours { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 10px; font-size: 13px; }
+  .colours label { display: flex; align-items: center; gap: 6px; color: var(--ui-dim); }
+  input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; background: none; cursor: pointer; }
+  .presets { display: flex; gap: 6px; }
+  .preset { width: 30px; height: 26px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); cursor: pointer; padding: 0;
+            font: 700 15px/26px Toffee; font-variation-settings: "wght" 900, "SHDW" 0; }
+  .toggles { display: flex; gap: 6px; margin-left: auto; }
+  .toggles button { font: inherit; background: transparent; color: var(--ui-ink); border: 1px solid rgba(255,255,255,.3);
+                    border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+  .toggles button[aria-pressed=true] { background: var(--ui-ink); color: var(--ui); }
+
+  .stage { padding: 48px 16px 0; min-height: 60vh; }
+  .tester { font-family: Toffee; font-size: var(--size); line-height: var(--lh); letter-spacing: var(--track);
+            font-variation-settings: "wght" var(--wght), "slnt" var(--slnt), "SHDW" var(--shdw);
+            outline: none; overflow-wrap: anywhere; white-space: pre-wrap; text-align: var(--align, left);
+            padding-bottom: calc(var(--shdw) * var(--size) / 1000 * .8 + 40px); caret-color: currentColor; }
+  .hint { font-size: 13px; opacity: .7; margin: 0 0 8px; }
+
+  .css { margin: 0 16px 40px; padding: 12px 14px; background: rgba(0,0,0,.18); color: #fff; border-radius: 6px;
+         font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-x: auto; }
+  .css-head { display: flex; justify-content: space-between; align-items: center; margin: 0 16px 6px; font-size: 13px; }
+  .css-head button { font: inherit; background: rgba(0,0,0,.25); color: #fff; border: 0; border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin: 0 16px 8px; opacity: .75; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; padding: 0 16px 48px; }
+  .grid button { font-family: Toffee; font-size: 56px; line-height: 1.25; text-align: center; padding: 6px 0 14px; border: 0;
+                 background: rgba(0,0,0,.08); border-radius: 6px; cursor: pointer; color: inherit;
+                 font-variation-settings: "wght" var(--wght), "slnt" var(--slnt), "SHDW" min(var(--shdw), 150); }
+  .grid button:hover { background: rgba(0,0,0,.16); }
+  footer { padding: 16px 16px 40px; font-size: 13px; opacity: .8; }
+
+  @media (max-width: 600px) {
+    .ctl { grid-template-columns: 60px 1fr 40px; }
+    .stage { padding-top: 28px; }
+    .toggles { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="panel-head">
+    <span class="brand">Toffee</span>
+    <nav>
+      <a href="fonts/Toffee[SHDW,slnt,wght].woff2" download>woff2</a>
+      <a href="fonts/Toffee[SHDW,slnt,wght].ttf" download>ttf</a>
+      <a href="https://github.com/lukehmu/toffee">GitHub</a>
+    </nav>
+  </div>
+  <div class="controls">
+    <label class="ctl"><span>Weight</span><input type="range" min="300" max="900" step="1" value="900" data-var="--wght"><output>900</output></label>
+    <label class="ctl"><span>Slant</span><input type="range" min="-12" max="0" step="0.5" value="-10" data-var="--slnt"><output>-10</output></label>
+    <label class="ctl"><span>Shadow</span><input type="range" min="0" max="1000" step="1" value="600" data-var="--shdw"><output>600</output></label>
+    <label class="ctl"><span>Size</span><input type="range" min="16" max="400" step="1" value="160" data-var="--size" data-unit="px"><output>160</output></label>
+    <label class="ctl"><span>Leading</span><input type="range" min="0.7" max="1.8" step="0.01" value="0.95" data-var="--lh"><output>0.95</output></label>
+    <label class="ctl"><span>Tracking</span><input type="range" min="-0.1" max="0.3" step="0.005" value="0" data-var="--track" data-unit="em"><output>0</output></label>
+  </div>
+  <div class="colours">
+    <label>Face <input type="color" id="face" value="#f3ecd1"></label>
+    <label>Shadow <input type="color" id="shadow" value="#3c1c20"></label>
+    <label>Background <input type="color" id="bg" value="#e2482a"></label>
+    <div class="presets" id="presets" aria-label="Colour presets"></div>
+    <div class="toggles" role="group" aria-label="Alignment">
+      <button data-align="left" aria-pressed="true">Left</button>
+      <button data-align="center" aria-pressed="false">Centre</button>
+      <button data-align="right" aria-pressed="false">Right</button>
+    </div>
+  </div>
+</div>
+
+<div class="stage">
+  <p class="hint">Click the text to type.</p>
+  <div class="tester" id="tester" contenteditable="true" spellcheck="false">Best year yet</div>
+</div>
+
+<div class="css-head"><span>CSS for this setting</span><button id="copy">Copy</button></div>
+<pre class="css" id="css"></pre>
+
+<h2>Glyphs</h2>
+<div class="grid" id="grid"></div>
+
+<footer>Toffee is a COLRv1 variable font with axes <code>wght</code> 300–900, <code>slnt</code> −12–0 and <code>SHDW</code> 0–1000.
+  Licensed under the <a href="https://openfontlicense.org">SIL Open Font License 1.1</a>.
+  Colour needs a COLRv1 renderer (Chrome, Edge, Firefox, Safari 17+); elsewhere you get the plain face.</footer>
+
+<script>
+  const root = document.documentElement;
+  const tester = document.getElementById("tester");
+  const css = document.getElementById("css");
+  const face = document.getElementById("face"), shadow = document.getElementById("shadow"), bg = document.getElementById("bg");
+  const val = name => getComputedStyle(root).getPropertyValue(name).trim();
+  const PRESETS = [
+    { face: "#f3ecd1", shadow: "#3c1c20", bg: "#e2482a" },
+    { face: "#ffffff", shadow: "#f24521", bg: "#1f6fd1" },
+    { face: "#ffd140", shadow: "#000000", bg: "#7d3cff" },
+    { face: "#1f1f33", shadow: "#fa739e", bg: "#ffd9e4" },
+  ];
+
+  // A fresh @font-palette-values name on each change: some engines don't repaint when a rule is edited in place.
+  let paletteN = 0;
+  function applyColours() {
+    const name = `--toffee-${++paletteN}`;
+    document.getElementById("palette-rule").textContent =
+      `@font-palette-values ${name} { font-family: Toffee; base-palette: 0; override-colors: 0 ${shadow.value}, 1 ${face.value}; }`;
+    document.querySelectorAll(".tester, .grid button").forEach(el => el.style.fontPalette = name);
+    root.style.setProperty("--bg", bg.value);
+    // keep page text readable on light or dark backgrounds
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(bg.value.slice(i, i + 2), 16));
+    document.body.style.color = (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#2a1316" : "#ffffff";
+    updateCss();
+  }
+
+  function updateCss() {
+    css.textContent =
+`@font-face {
+  font-family: Toffee;
+  src: url("Toffee[SHDW,slnt,wght].woff2") format("woff2");
+  font-weight: 300 900;
+}
+@font-palette-values --my-toffee {
+  font-family: Toffee;
+  override-colors: 0 ${shadow.value}, 1 ${face.value};
+}
+h1 {
+  font-family: Toffee;
+  font-variation-settings: "wght" ${val("--wght")}, "slnt" ${val("--slnt")}, "SHDW" ${val("--shdw")};
+  font-palette: --my-toffee;
+}`;
+  }
+
+  for (const input of document.querySelectorAll("input[data-var]")) {
+    input.addEventListener("input", () => {
+      root.style.setProperty(input.dataset.var, input.value + (input.dataset.unit || ""));
+      input.nextElementSibling.value = input.value;
+      updateCss();
+    });
+  }
+  [face, shadow, bg].forEach(el => el.addEventListener("input", applyColours));
+
+  const presets = document.getElementById("presets");
+  PRESETS.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "preset";
+    b.title = `Preset ${i + 1}`;
+    b.textContent = "a";
+    b.style.background = p.bg;
+    b.style.color = p.face;
+    b.addEventListener("click", () => { face.value = p.face; shadow.value = p.shadow; bg.value = p.bg; applyColours(); });
+    presets.append(b);
+  });
+
+  document.querySelectorAll("[data-align]").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll("[data-align]").forEach(b => b.setAttribute("aria-pressed", b === btn));
+    root.style.setProperty("--align", btn.dataset.align);
+  }));
+
+  document.getElementById("copy").addEventListener("click", async e => {
+    try { await navigator.clipboard.writeText(css.textContent); e.target.textContent = "Copied"; }
+    catch { e.target.textContent = "Select and copy"; }
+    setTimeout(() => e.target.textContent = "Copy", 1500);
+  });
+
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.,:;'\"()[]{}/\\|-–—+−=<>*#%$£€&@…“”‘’•·_~^";
+  const grid = document.getElementById("grid");
+  for (const c of chars) {
+    const b = document.createElement("button");
+    b.textContent = c;
+    b.title = `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}: insert`;
+    b.addEventListener("click", () => { tester.textContent += c; });
+    grid.append(b);
+  }
+
+  applyColours();
+</script>
+</body>
+</html>
