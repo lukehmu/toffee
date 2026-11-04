@@ -74,6 +74,11 @@ def geo(p):
 # ---------------------------------------------------------------- shared parts
 
 
+def _lc_nw(g):
+    """Width of n/h/u (stem to stem)."""
+    return g.wn + 0.4 * g.a
+
+
 def n_arch(g, x0, w, s0=0.45):
     ya = 0.42 * g.X
     return S(ARC(x0 + w / 2, ya, w / 2, g.X + g.ov - g.b - ya, 165, 0, s0, 1), LN(x0 + w, ya, x0 + w, g.yb))
@@ -84,19 +89,34 @@ def u_cup(g, x0, w, s1=0.45):
     return S(LN(x0, g.yx, x0, yu), ARC(x0 + w / 2, yu, w / 2, yu - g.b + g.ov, 180, 360, 1, s1))
 
 
-def bowl_right(g, x0, rx, cy, ry):
-    """Bowl attached to a stem on its left (b, p)."""
-    return ARC(x0 + rx, cy, rx, ry, 125, -125, 0.5, 0.5)
+def _lc_rx(g):
+    """Half-width of the lowercase bowls; grows with the pen so counters stay open at 900."""
+    return g.wn / 2 + 10 + 0.25 * g.a
 
 
-def bowl_left(g, xs, rx, cy, ry):
-    """Bowl attached to a stem on its right (a, d, g, q)."""
-    return ARC(xs - rx, cy, rx, ry, 55, 305, 0.5, 0.5)
+def bowl_right(g, x0, rx, cy, ry, sj=0.45):
+    """Bowl attached to a stem on its left (b, p): full pen, tapering into the stem."""
+    cx = x0 + rx
+    return S(
+        ARC(cx, cy, rx, ry, 125, 95, sj, 1),
+        ARC(cx, cy, rx, ry, 95, -95)[1:],
+        ARC(cx, cy, rx, ry, -95, -125, 1, sj)[1:],
+    )
 
 
-def hook_left(g, xs, ytop, rh, yh=-30):
-    """Stem going down into a descender hook that curls left, ending in a ball."""
-    return S(LN(xs, ytop, xs, yh), ARC(xs - rh, yh, rh, yh - g.yD, 0, -165, 1, g.dot * 1.15, 0, 1))
+def bowl_left(g, xs, rx, cy, ry, sj=0.45):
+    """Bowl attached to a stem on its right (a, d, g, q): full pen, tapering into the stem."""
+    cx = xs - rx
+    return S(
+        ARC(cx, cy, rx, ry, 55, 85, sj, 1),
+        ARC(cx, cy, rx, ry, 85, 275)[1:],
+        ARC(cx, cy, rx, ry, 275, 305, 1, sj)[1:],
+    )
+
+
+def hook_left(g, xs, ytop, rh, yh=-10):
+    """Stem going down into a descender hook that curls left, ending in a ball clear of the bowl."""
+    return S(LN(xs, ytop, xs, yh), ARC(xs - rh, yh, rh, yh - g.yD, 0, -140, 1, g.dot, 0, 1))
 
 
 def tail_right(g, xs, ytop, rt, s0=1):
@@ -126,33 +146,41 @@ def s_shape(g, cx, rx, top, bot, k=1.0):
 
 @glyph("a")
 def _a(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yx, g.wn * 0.28)]
 
 
 @glyph("b")
 def _b(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [LN(0, g.yA, 0, g.yb), bowl_right(g, 0, rx, g.cy, g.ry)]
 
 
 @glyph("c")
 def _c(g):
-    rx = g.wn / 2 + 5
-    return [ARC(rx, g.cy, rx, g.ry, 45, 315, g.dot * 1.1, g.dot * 1.1, 0.7, 0.7)]
+    rx = _lc_rx(g) - 5
+    return [
+        S(
+            ARC(rx, g.cy, rx, g.ry, 45, 180, g.dot * 1.05, 1, 0.8, 0),
+            ARC(rx, g.cy, rx, g.ry, 180, 315, 1, g.dot * 1.05, 0, 0.8)[1:],
+        )
+    ]
 
 
 @glyph("d")
 def _d(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yA, g.wn * 0.28)]
 
 
 @glyph("e")
 def _e(g):
-    rx = g.wn / 2 + 15
-    ybar = g.cy + 0.04 * g.X
-    return [LN(0, ybar, 2 * rx, ybar, 0.8), ARC(rx, g.cy, rx, g.ry, 5, 320, 1, g.dot * 1.1, 0, 0.6)]
+    rx = _lc_rx(g) + 5
+    ybar = g.cy + 0.03 * g.X
+    return [
+        LN(0, ybar, 2 * rx, ybar, 0.65),
+        S(ARC(rx, g.cy, rx, g.ry, 5, 200), ARC(rx, g.cy, rx, g.ry, 200, 315, 1, g.dot, 0, 0.8)[1:]),
+    ]
 
 
 @glyph("f")
@@ -160,20 +188,20 @@ def _f(g):
     rf = g.wn * 0.36
     yh = g.yA - rf * 0.8
     return [
-        S(LN(0, g.yb, 0, yh), ARC(rf, yh, rf, rf * 0.8, 180, 30, 1, g.dot * 1.1, 0, 1)),
-        LN(-g.wn * 0.22, g.yx, g.wn * 0.55, g.yx, 0.85),
+        S(LN(0, g.yb, 0, yh), ARC(rf, yh, rf, rf * 0.8, 180, 45, 1, g.dot * 1.1, 0, 1)),
+        LN(-g.wn * 0.22, g.yx, g.wn * 0.5, g.yx, 0.85),
     ]
 
 
 @glyph("g")
 def _g(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), hook_left(g, 2 * rx, g.yx, rx * 0.95)]
 
 
 @glyph("h")
 def _h(g):
-    return [LN(0, g.yA, 0, g.yb), n_arch(g, 0, g.wn)]
+    return [LN(0, g.yA, 0, g.yb), n_arch(g, 0, _lc_nw(g))]
 
 
 @glyph("i")
@@ -183,12 +211,12 @@ def _i(g):
 
 @glyph("j")
 def _j(g):
-    return [hook_left(g, 0, g.yx, g.wn * 0.42), DOT(0, g.X + 50 + g.dot * g.a, g.dot)]
+    return [hook_left(g, 0, g.yx, g.wn * 0.34), DOT(0, g.X + 50 + g.dot * g.a, g.dot)]
 
 
 @glyph("k")
 def _k(g):
-    w = g.wn * 0.92
+    w = g.wn * 0.92 + 0.2 * g.a
     return [
         LN(0, g.yA, 0, g.yb),
         LN(0, 0.3 * g.X, w, g.yx, 0.55, 1),
@@ -203,30 +231,30 @@ def _l(g):
 
 @glyph("m")
 def _m(g):
-    w = g.wn * 0.8
+    w = g.wn * 0.72 + 0.9 * g.a
     return [LN(0, g.yx, 0, g.yb), n_arch(g, 0, w), n_arch(g, w, w)]
 
 
 @glyph("n")
 def _n(g):
-    return [LN(0, g.yx, 0, g.yb), n_arch(g, 0, g.wn)]
+    return [LN(0, g.yx, 0, g.yb), n_arch(g, 0, _lc_nw(g))]
 
 
 @glyph("o")
 def _o(g):
-    rx = g.wn / 2 + 20
+    rx = _lc_rx(g) + 10
     return [ARC(rx, g.cy, rx, g.ry, 0, 360)]
 
 
 @glyph("p")
 def _p(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [LN(0, g.yx, 0, g.yD), bowl_right(g, 0, rx, g.cy, g.ry)]
 
 
 @glyph("q")
 def _q(g):
-    rx = g.wn / 2 + 10
+    rx = _lc_rx(g)
     return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), LN(2 * rx, g.yx, 2 * rx, g.yD)]
 
 
@@ -252,18 +280,19 @@ def _t(g):
 
 @glyph("u")
 def _u(g):
-    return [u_cup(g, 0, g.wn), tail_right(g, g.wn, g.yx, g.wn * 0.28)]
+    w = _lc_nw(g)
+    return [u_cup(g, 0, w), tail_right(g, w, g.yx, g.wn * 0.28)]
 
 
 @glyph("v")
 def _v(g):
-    w = g.wn * 1.05
+    w = g.wn * 1.05 + 0.3 * g.a
     return [S(LN(0, g.yx, w / 2, g.yb, 1, 0.85), LN(w / 2, g.yb, w, g.yx, 0.85, 1))]
 
 
 @glyph("w")
 def _w(g):
-    w = g.wn * 1.6
+    w = g.wn * 1.6 + 0.5 * g.a
     return [
         S(
             LN(0, g.yx, w * 0.25, g.yb, 1, 0.8),
@@ -276,18 +305,19 @@ def _w(g):
 
 @glyph("x")
 def _x(g):
-    w = g.wn * 0.98
+    w = g.wn * 0.98 + 0.3 * g.a
     return [LN(0, g.yx, w, g.yb), LN(0, g.yb, w, g.yx, 0.8)]
 
 
 @glyph("y")
 def _y(g):
-    return [u_cup(g, 0, g.wn), hook_left(g, g.wn, g.yx, g.wn * 0.5)]
+    w = _lc_nw(g)
+    return [u_cup(g, 0, w), hook_left(g, w, g.yx, g.wn * 0.5)]
 
 
 @glyph("z")
 def _z(g):
-    w = g.wn * 0.88
+    w = g.wn * 0.88 + 0.3 * g.a
     return [S(LN(0, g.yx, w, g.yx), LN(w, g.yx, 0, g.yb, 1, 1.05), LN(0, g.yb, w, g.yb))]
 
 
