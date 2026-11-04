@@ -496,7 +496,7 @@ def _Z(g):
 
 
 def fig_w(g):
-    return g.wn * 1.05
+    return g.wn * 1.05 + g.a * 0.8
 
 
 @glyph("zero")
@@ -756,74 +756,85 @@ def _bar(g):
     return [LN(0, g.C + 110, 0, g.D + 60, 0.75)]
 
 
+def _fig_op_w(g):
+    return g.wn * 1.0 + g.a * 0.7
+
+
+def _fig_op_y(g):
+    return 0.46 * g.C
+
+
 @glyph("plus")
 def _plus(g):
-    w = g.wn * 0.95
-    y = 0.48 * g.X
+    w = _fig_op_w(g)
+    y = _fig_op_y(g)
     return [LN(0, y, w, y, 0.9), LN(w / 2, y - w / 2, w / 2, y + w / 2, 0.85)]
 
 
 @glyph("minus", 0x2212)
 def _minus(g):
-    y = 0.48 * g.X
-    return [LN(0, y, g.wn * 0.95, y, 0.9)]
+    y = _fig_op_y(g)
+    return [LN(0, y, _fig_op_w(g), y, 0.9)]
 
 
 @glyph("equal")
 def _equal(g):
-    w = g.wn * 0.95
-    y = 0.48 * g.X
-    d = g.b * 0.9 + 55
+    w = _fig_op_w(g)
+    y = _fig_op_y(g)
+    d = g.b * 0.9 + 60
     return [LN(0, y + d, w, y + d, 0.9), LN(0, y - d, w, y - d, 0.9)]
 
 
 @glyph("less")
 def _less(g):
-    w = g.wn * 0.85
-    y = 0.48 * g.X
+    w = _fig_op_w(g) * 0.9
+    y = _fig_op_y(g)
     return [S(LN(w, y + w * 0.6, 0, y, 0.85), LN(0, y, w, y - w * 0.6, 0.85))]
 
 
 @glyph("greater")
 def _greater(g):
-    w = g.wn * 0.85
-    y = 0.48 * g.X
+    w = _fig_op_w(g) * 0.9
+    y = _fig_op_y(g)
     return [S(LN(0, y + w * 0.6, w, y, 0.85), LN(w, y, 0, y - w * 0.6, 0.85))]
 
 
 @glyph("asterisk")
 def _asterisk(g):
-    r = g.wn * 0.4
-    cx, cy = r, g.C - r * 0.9
+    r = g.wn * 0.42 + g.a * 0.3
+    cx, cy = r, g.C - r * 1.0
     out = []
     for ang in (90, 162, 234, 306, 18):
         x, y = at(cx, cy, r, r, ang)
-        out.append(LN(cx, cy, x, y, 0.7, 0.75, 0, 1))
+        out.append(LN(cx, cy, x, y, 0.55, 0.6, 0, 1))
     return out
 
 
 @glyph("numbersign")
 def _numbersign(g):
-    w = g.wn * 1.15
-    t, b = g.C - 40, 0 + 40
-    y1, y2 = 0.3 * g.C, 0.65 * g.C
+    sc = 0.7
+    sp = 2 * g.a * sc + 100
+    lean = 120
+    w = sp + lean
+    t, b = g.C - 50, 50
+    y1, y2 = 0.3 * g.C, 0.66 * g.C
     return [
-        LN(w * 0.28, b, w * 0.42, t, 0.75),
-        LN(w * 0.62, b, w * 0.76, t, 0.75),
-        LN(0, y1, w, y1, 0.8),
-        LN(w * 0.08, y2, w * 1.05, y2, 0.8),
+        LN(0, b, lean, t, sc),
+        LN(sp, b, sp + lean, t, sc),
+        LN(-30, y1, w + 30, y1, sc),
+        LN(30, y2, w + 60, y2, sc),
     ]
 
 
 @glyph("percent")
 def _percent(g):
-    w = g.wn * 1.5
-    r = w * 0.17
-    ry = 0.16 * g.C
+    r = g.wn * 0.26 + g.a * 0.5
+    w = 4 * r + 60
+    ry = 0.19 * g.C
     return [
         ARC(r, g.C - ry - g.b, r, ry, 0, 360, 0.7),
         ARC(w - r, ry + g.b, r, ry, 0, 360, 0.7),
-        LN(w * 0.15, g.b, w * 0.85, g.yC, 0.75),
+        LN(w * 0.18, g.b, w * 0.82, g.yC, 0.75),
     ]
 
 
@@ -835,11 +846,11 @@ def _dollar(g):
 
 @glyph("ampersand")
 def _ampersand(g):
-    w = g.wn * 1.3
-    ru = 0.17 * g.C
+    w = g.wn * 1.3 + g.a * 1.3
+    ru = 0.21 * g.C
     yu = g.C + g.ov - g.b - ru
     xu = w * 0.38
-    rl = 0.24 * g.C
+    rl = 0.27 * g.C
     yl = g.b - g.ov + rl
     sx, sy = at(xu, yu, w * 0.22, ru, 230)
     ex, ey = at(w * 0.42, yl, w * 0.42, rl, 140)
@@ -858,15 +869,16 @@ def _ampersand(g):
 
 @glyph("at")
 def _at(g):
-    w = g.wn * 1.9
+    w = g.wn * 1.9 + g.a * 1.5
     R = w / 2
-    cy = 0.38 * g.C
-    rb = g.wn * 0.38
-    xs = R + rb * 0.9
+    cy = 0.37 * g.C
+    ry = 0.42 * g.C
+    rb = g.wn * 0.3 + g.a * 0.2
+    xs = R + rb * 0.85
     return [
-        ARC(R, cy, R, R * 0.92, -30, 320, 0.7, 0.7),
-        ARC(R, cy, rb, rb * 1.05, 0, 360, 0.75),
-        S(LN(xs, cy + rb, xs, cy - rb * 0.6, 0.8), ARC(xs + R * 0.2, cy - rb * 0.6, R * 0.2, rb * 0.4, 180, 330, 0.8, 0.7)),
+        ARC(R, cy, R, ry, -30, 320, 0.7, 0.7),
+        ARC(R, cy, rb, rb * 1.1, 0, 360, 0.5),
+        S(LN(xs, cy + rb, xs, cy - rb * 0.6, 0.5), ARC(xs + R * 0.2, cy - rb * 0.6, R * 0.2, rb * 0.4, 180, 330, 0.5, 0.5)),
     ]
 
 
@@ -889,9 +901,10 @@ def _middot(g):
 
 @glyph("asciitilde")
 def _tilde(g):
-    w = g.wn * 0.95
-    y = 0.48 * g.X
-    return [S(ARC(w * 0.25, y, w * 0.25, 45, 180, 0, 0.8), ARC(w * 0.75, y, w * 0.25, 45, 180, 360, 0.8))]
+    w = _fig_op_w(g) * 1.1
+    y = 0.5 * g.C
+    h = 25 + g.b * 0.9
+    return [S(ARC(w * 0.25, y, w * 0.25, h, 180, 0, 0.7), ARC(w * 0.75, y, w * 0.25, h, 180, 360, 0.7))]
 
 
 @glyph("braceleft")
