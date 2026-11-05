@@ -23,10 +23,13 @@ Not applied: wn 360 (the photo's narrower 900; a judgment call), and kerning.
 
 ## Applied (2026-11-05): joins and counters at 900
 
-- **Soft joins**: every concave corner where strokes meet is filleted (`fillet()` in `glyphs.py`, radius
-  `10 + 0.35a`; smaller in acute crotches and in e's eye). a d g q b p þ, e (eye, aperture and the beak under
-  the bar), n h m, u y (counter and crotch), t f, k K, the caps' stem/bar/bowl corners, A M N V W X Y Z v w x
-  z, G's bar, and 1 2 4 5 6 7 8 9. bowl_left ends at 320° and bowl_right at ±145°, so a/b/d/p close at 300.
+- **Soft joins**: the concave corners where strokes meet are filleted (`fillet()` in `glyphs.py`, radius
+  `10 + 0.35a`; smaller in acute crotches and in e's eye): a d g q (both counter corners), b p þ (bottom), e
+  (eye, aperture and the beak under the bar), u y (crotch), t (right corners), f (right, under the bar), k K
+  (upper crotch), the caps' stem/bar/bowl corners, A M N V W X Y Z v w x z, G's bar, and 1 2 4 7. Joins that
+  are already soft (n h m arches, b p tops, u y counters) or whose fillet added under ~100 units² at both
+  masters (5 6 8 9, the sides of x X, under A's bar, k's arm/leg, Y's stem) have none: each fillet costs
+  about 0.6 KB of woff2. bowl_left ends at 320° and bowl_right at ±145°, so a/b/d/p close at 300.
 - **Counters at 900**: e's bar thins to 0.55 and drops 11 units; s's terminals are shorter with smaller
   balls; B's waist is lower (0.52C) and thin; the figures' bowls use a pen scale of 0.88 at 900 (their width
   is fixed by the class, so a wider skeleton would just be scaled back), 0's class is 1.00 (heavy references
