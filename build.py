@@ -40,8 +40,8 @@ RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
 FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide"]]
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
-SLANTS = {0: 0.0, -12: math.tan(math.radians(12))}
-SHADOWS = {0: 0.0, SHADOW_MAX: float(SHADOW_MAX)}
+SLANTS = (0, -12)  # slnt masters, degrees (shear = tan of the angle)
+SHADOWS = (0, SHADOW_MAX)
 
 PALETTES = [
     [(0.235, 0.110, 0.125, 1.0), (0.953, 0.925, 0.82, 1.0)],  # chocolate shadow, cream face
@@ -51,24 +51,63 @@ PALETTES = [
 ]
 
 
-def hull(ells, t):
-    """Convex hull of ellipses (cx, cy, pa, pb) after shear t, sampled at K directions, clockwise."""
+def hull(ells):
+    """Convex hull of axis-aligned ellipses (cx, cy, pa, pb): its support point in each of the K DIRS."""
     pts = []
     for ux, uy in DIRS:
-        vx, vy = ux, t * ux + uy  # M^T u
         best = None
         for cx, cy, pa, pb in ells:
-            h = math.sqrt(pa * pa * vx * vx + pb * pb * vy * vy)
+            h = math.sqrt(pa * pa * ux * ux + pb * pb * uy * uy)
             val = ux * cx + uy * cy + h
             if best is None or val > best[0] + 1e-9:
-                ex, ey = pa * pa * vx / h, pb * pb * vy / h
-                best = (val, cx + ex + t * ey, cy + ey)
+                best = (val, cx + pa * pa * ux / h, cy + pb * pb * uy / h)
         pts.append((best[1], best[2]))
-    return pts[::-1]
+    return pts
+
+
+def _sweep_plan():
+    """[(direction index, from the shadow copy?)]: the shadow contour of a convex piece P is hull(P, P + o).
+
+    Direction k takes the copy's point when u_k . o > 0. o is fixed in sheared space, so before the shear
+    it depends on the slant, and a direction near the long edges' normal would switch from P to the copy
+    between slant masters: the in-between point would then sit partway along the long edge, cutting the
+    corner. So the direction at each long edge takes both points (P's, then the copy's, or the reverse),
+    K + 2 in all, the same in every master; the other directions must keep their side at every slant.
+    """
+    def side(t):
+        ox, oy = SHADOW_DIR[0] - t * SHADOW_DIR[1], SHADOW_DIR[1]
+        return [ux * ox + uy * oy for ux, uy in DIRS]
+
+    ts = [math.tan(math.radians(-s)) for s in SLANTS]
+    mid = side(sum(ts) / len(ts))
+    front = [v > 0 for v in mid]
+    both = {min((k - 1) % K, k, key=lambda i: abs(mid[i])) for k in range(K) if front[k - 1] != front[k]}
+    for t in ts:
+        assert all(k in both or (v > 0) == front[k] for k, v in enumerate(side(t))), "SHADOW_DIR vs K"
+    plan = []
+    for k in range(K):
+        if k in both:
+            plan += [(k, front[k - 1]), (k, not front[k - 1])]
+        else:
+            plan.append((k, front[k]))
+    return plan
+
+
+SWEEP = _sweep_plan()
 
 
 def outline(strokes, p, dx, t, shadow=None):
+    """Convex contours (clockwise) of the strokes: hulls built upright, then sheared by t about Y0.
+
+    Every slant master is the same upright hull sheared, so points interpolate linearly between slant
+    masters (a hull built in sheared space picks different support points per slant, and in-between
+    instances distort). The shadow copy is offset by (sx - t*sy, sy) before the shear, so after it the
+    shadow points along SHADOW_DIR at every slant. A shadow contour has K + 2 points (SWEEP), also at
+    SHDW 0, where the copy coincides.
+    """
     contours = []
+    sx, sy = (SHADOW_DIR[0] * shadow, SHADOW_DIR[1] * shadow) if shadow else (0.0, 0.0)
+    ox, oy = sx - t * sy, sy
     for st in strokes:
         ells = []
         for x, y, s, r in st:
@@ -76,13 +115,13 @@ def outline(strokes, p, dx, t, shadow=None):
             pb = s * (p.b + r * (p.a - p.b))
             if shadow is not None:
                 pa, pb = pa + p.border, pb + p.border
-            ells.append((x + dx + t * (y - Y0), y, pa, pb))
+            ells.append((x + dx, y, pa, pb))
         pieces = [[ells[0]]] if len(ells) == 1 else [[ells[i], ells[i + 1]] for i in range(len(ells) - 1)]
         for piece in pieces:
-            if shadow:
-                sx, sy = SHADOW_DIR[0] * shadow, SHADOW_DIR[1] * shadow
-                piece = piece + [(cx + sx, cy + sy, pa, pb) for cx, cy, pa, pb in piece]
-            contours.append(hull(piece, t))
+            pts = hull(piece)
+            if shadow is not None:
+                pts = [(pts[k][0] + ox, pts[k][1] + oy) if copy else pts[k] for k, copy in SWEEP]
+            contours.append([(px + t * (py - Y0), py) for px, py in pts[::-1]])
     return contours
 
 
@@ -218,12 +257,20 @@ def notdef():
     return pen.glyph()
 
 
+def pen_at(wght):
+    """(a, b) of the pen at any weight: linear between the two weight masters, as the VF interpolates."""
+    (w0, (a0, b0)), (w1, (a1, b1)) = sorted(WEIGHTS.items())
+    f = (wght - w0) / (w1 - w0)
+    return a0 + (a1 - a0) * f, b0 + (b1 - b0) * f
+
+
 def build_master(wght, slnt, shdw):
-    a, b = WEIGHTS[wght]
+    """One master. Any location builds (tests compare in-between VF instances with direct builds)."""
+    a, b = pen_at(wght)
     p = pen_params(a, b)
     g = geo(p)
     n_adv = g.wn + 2 * a + 2 * p.sb  # every width class is a ratio of this
-    t = SLANTS[slnt]
+    t = math.tan(math.radians(-slnt))
     order = [".notdef", "space"]
     cmap = {0x20: "space", 0xA0: "space"}
     glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
@@ -262,14 +309,14 @@ def build_master(wght, slnt, shdw):
             base, n_base = composite_of[name]
             mark = name + ".mark"
             glyf[mark] = to_glyph(outline(strokes[n_base:], p, dx, t))
-            glyf[mark + ".shadow"] = to_glyph(outline(strokes[n_base:], p, dx, t, shadow=SHADOWS[shdw]))
+            glyf[mark + ".shadow"] = to_glyph(outline(strokes[n_base:], p, dx, t, shadow=float(shdw)))
             glyf[name] = compound([base, mark])
             glyf[name + ".shadow"] = compound([base + ".shadow", mark + ".shadow"])
             adv[mark] = adv[mark + ".shadow"] = advance
             order += [mark, mark + ".shadow"]
         else:
             glyf[name] = to_glyph(outline(strokes, p, dx, t))
-            glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=SHADOWS[shdw]))
+            glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=float(shdw)))
         adv[name] = adv[name + ".shadow"] = advance
         order += [name, name + ".shadow"]
         if uni is not None:
