@@ -52,11 +52,15 @@ in the same direction k in every master, and the heuristic matches near-identica
   sharp concave corner wherever two strokes meet at an angle, and at 900 those points dominate small counters.
   `fillet(g, st1, st2, guess, rho)` solves the circle of radius rho that touches both strokes' ink near `guess`
   and returns a stroke swept around it, starting and ending on the two centre lines with their pens (so the
-  join stays tangent after spacing's horizontal skeleton scale). It always has `n + 2` samples, its pens shrink
-  wherever they would poke out of the strokes, and `st1`/`st2` may be lists of strokes. Use it only where the
-  same two strokes form the same corner in both masters: a corner that moves far between 300 and 900 (r's arch,
-  k's lower crotch) interpolates into a bulge at 600, so check new ones against a master built directly at 600.
-  Acute crotches take a small radius (`k=0.4`), or the fillet runs far up them.
+  join stays tangent after spacing's horizontal skeleton scale). It has `n` = 5 samples (+2 with `spike=True`,
+  which fills a very acute corner's tip: e only), its pens shrink wherever they would poke out of the strokes,
+  and `st1`/`st2` may be lists of strokes. A fillet is solved, not a formula in `a`, so `glyph()` wraps every
+  glyph function: between the masters each fillet stroke is the linear blend of the two masters' fillets
+  (`_linear_fillets`; `_MASTER_AB` must match `build.WEIGHTS`), which keeps `tests/check_font.py` passing.
+  Use one only where the same two strokes form the same corner in both masters: a corner that moves far
+  between 300 and 900 (r's arch, k's lower crotch) blends into a bulge at 600. Acute crotches take a small
+  radius (`k=0.4`), or the fillet runs far up them. Fillets cost bytes (about 65 KB of woff2 for ~100), so
+  only add one where it visibly changes the 900 counter.
 - **Weight-axis straightness**: a hull's sides switch from one pen to the other at directions set by the
   stroke's slope and its pen sizes. Where those differ between the masters (a slope that changes with `a`, a
   roundness that changes along the stroke), in-between weights bow. Long diagonals and marks keep one
