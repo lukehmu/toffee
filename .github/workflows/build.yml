@@ -1,0 +1,32 @@
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build
+        run: uv run build.py
+      - name: Committed fonts match the source
+        # Builds are byte-reproducible, so a diff means fonts/ wasn't rebuilt after a source change.
+        run: git diff --stat --exit-code -- fonts
+      - name: Kerning (paint model)
+        run: uv run tests/check_kern.py
+      - name: Font checks (in-between instances, COLR, metrics)
+        run: uv run tests/check_font.py
+      - name: OTS
+        run: |
+          for f in fonts/*.ttf fonts/*.woff2; do
+            uv run --python 3.13 --with opentype-sanitizer==9.2.0 python -m ots "$f"
+          done
+      - name: fontbakery check-universal
+        run: |
+          uv run --python 3.13 --with fontbakery==1.1.0 fontbakery check-universal --succinct -l WARN \
+            --json fb.json "fonts/Toffee[SHDW,slnt,wght].ttf" || true
+          uv run tests/fontbakery_gate.py fb.json
