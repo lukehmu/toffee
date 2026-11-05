@@ -21,6 +21,7 @@ from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple
 from fontTools.ttLib.tables.otTables import PaintFormat
 from fontTools import varLib
 
+from features import ot_features, set_code_pages, zero_width
 from glyphs import BASE_OF, GLYPHS, PUNCT_SIDE, SPACING, geo
 from kern import kern_feature
 
@@ -38,7 +39,7 @@ SHADOW_MAX = 1000
 VERSION = 1.0
 VERSION_STRING = "Version 1.000"
 RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
-FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide"]]
+FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide", "plusminus", "logicalnot"]]
 MARK_TOL = 1.0  # accent marks whose skeletons match this closely (at both weights) share one glyph
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
@@ -332,6 +333,7 @@ def layout(wght):
         for n in group:
             st, dx, advance, *rest = placed[n]
             placed[n] = (st, dx + (width - advance) / 2, width, *rest)
+    zero_width(placed)
     return p, g, placed, composite_of
 
 
@@ -429,7 +431,7 @@ def build_master(wght, slnt, shdw):
     )
     # Underline half the pen's height thick, a little below the baseline; varies with weight (MVAR unds/undo).
     fb.setupPost(italicAngle=slnt, underlineThickness=round(p.b), underlinePosition=-round(100 + p.b / 2))
-    fea = kern_fea(wght)
+    fea = ot_features(placed, g, t, Y0) + kern_fea(wght)
     if fea:
         fb.addOpenTypeFeatures(fea)
     return fb.font
@@ -543,7 +545,7 @@ def main():
     ]:
         vf["name"].setName(text, nid, 3, 1, 0x409)
     os2 = vf["OS/2"]
-    os2.recalcCodePageRanges(vf)
+    set_code_pages(vf)
     os2.usWinAscent = max(m["head"].yMax for m in masters)
     os2.usWinDescent = max(-m["head"].yMin for m in masters)
     prep = newTable("prep")  # smart dropout control for unhinted TrueType

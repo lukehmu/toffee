@@ -1511,3 +1511,478 @@ def _exclamdown(g):
 def _questiondown(g):
     w = g.wn * 0.95
     return _rot180(_question(g), w / 2, g.X / 2)
+
+
+# ---------------------------------------------------------------- coverage: CP1250/CP1252, Romanian, Turkish,
+# Baltic, Welsh and Maltese letters, combining marks. Everything here reuses the accent machinery above; base
+# shapes are fetched through GLYPHS so they follow any change to the base glyph.
+
+
+def _cov(name):
+    return GLYPHS[name][1]
+
+
+def _cov_breve(g, cx, z):
+    w = z.hw * 0.9
+    s = z.s * 0.85
+    h = z.hi - z.lo
+    return [
+        S(
+            ARC(cx, z.hi, w, h, 180, 270, s, s, 0.8, 0.3),
+            ARC(cx, z.hi, w, h, 270, 360, s, s, 0.3, 0.8)[1:],
+        )
+    ]
+
+
+def _cov_comma(g, x, y, r, turned=False):
+    """The comma's ball and tail (same proportions as _gf_tail) at ball radius r, ball centred at (x, y).
+
+    Turned: rotated 180 degrees, ball at the bottom and the tail rising to the right (Latvian ģ)."""
+    rt, rh = 0.9 * r, 1.9 * r
+    s0, s1 = 0.6 * r / g.a, 0.2 * r / g.a
+    if turned:
+        tail = ARC(x + rt, y, rt, rh, 180, 75, s0, s1, 1, 1)
+    else:
+        tail = ARC(x - rt, y, rt, rh, 0, -105, s0, s1, 1, 1)
+    return S(DOT(x, y, r / g.a), tail)
+
+
+def _cov_commaaccent(g, cx, z):
+    """Comma below (Romanian ș ț, Latvian ķ ļ ņ ŗ): the comma's shape at mark size, under the baseline."""
+    r = 0.8 * z.rd
+    return [_cov_comma(g, cx + 0.15 * r, -(70 - 0.4 * g.a) - r, r)]
+
+
+def _cov_commaturned(g, cx, z):
+    """Turned comma above (Latvian ģ), sitting on the accent band's floor."""
+    r = 0.8 * z.rd
+    return [_cov_comma(g, cx - 0.15 * r, z.bot + r, r, turned=True)]
+
+
+_AC_DRAW.update(breve=_cov_breve, commaaccent=_cov_commaaccent, commaturned=_cov_commaturned)
+_AC_MID.update(g=_AC_MID["a"], L=lambda g: g.wn * 0.25)
+_AC_FOOT.update(
+    I=lambda g: 0.35 * g.a,
+    i=lambda g: 0.35 * g.a,
+    U=lambda g: g.wn * 1.2 * 0.72,
+    u=lambda g: _lc_nw(g) + g.wn * 0.1,
+)
+# Where a mark below hangs, when not under the skeleton's middle (t's foot curve, r's stem).
+_COV_BELOW = {
+    "t": lambda g: g.wn * 0.21,
+    "r": lambda g: 0,
+    "C": _AC_MID["C"],
+    "c": _AC_MID["c"],
+    "a": _AC_MID["a"],
+}
+_COV_BOTTOM_MARKS = ("cedilla", "commaaccent", "ogonek")
+
+
+def mark_x(base, kind, g):
+    """Skeleton x (before build.py's width scaling) where a mark sits on base.
+
+    kind: "top", "bottom" or "ogonek". The composites below and the mark feature's anchors both use this,
+    so a decomposed letter lands where the precomposed one is drawn."""
+    if kind == "ogonek" and base in _AC_FOOT:
+        return _AC_FOOT[base](g)
+    if kind == "bottom" and base in _COV_BELOW:
+        return _COV_BELOW[base](g)
+    if base in _AC_MID:
+        return _AC_MID[base](g)
+    lo, hi = _ac_xspan(_cov(base)(g))
+    return hi - 0.2 * (hi - lo) if kind == "ogonek" else (lo + hi) / 2
+
+
+def accent_top(g, cap):
+    """Top of the accent band: a second mark above a precomposed letter stacks from here."""
+    return _ac_zone(g, cap).top
+
+
+def _cov_below(base, mark):
+    def fn(g):
+        z = _ac_zone(g, base[0].isupper())
+        return [*_cov(base)(g), *_AC_DRAW[mark](g, mark_x(base, "bottom", g), z)]
+
+    return fn
+
+
+def _cov_lacute(g):
+    """ĺ: an ascender leaves less room under the line ascender than a capital, so the acute is a little
+    smaller, starts lower and leans off the stem's rounded top to the right."""
+    z0 = _ac_zone(g, True)
+    r = z0.r * 0.9
+    bot = g.A + 45 - 0.45 * g.a
+    z = SimpleNamespace(**{**vars(z0), "lo": bot + r, "hi": z0.top - r, "r": r, "s": r / g.a})
+    return [*_cov("l")(g), *_ac_acute(g, 0.35 * g.a + 15, z)]
+
+
+# name -> (codepoint, base, mark). Bases "i"/"I" get the narrow treatment through _ac_composite.
+_COV_LETTERS = {}
+for _mark, _bases in {
+    "breve": "AaEeGgIiOoUu",
+    "macron": "AaEeIiOoUu",
+    "dotaccent": "CcEeGgI",
+    "ogonek": "IiUu",
+    "acute": "LWw",
+    "grave": "WwYy",
+    "circumflex": "WwYy",
+    "dieresis": "Ww",
+    "caron": "Uu",
+    "tilde": "EeIiUu",
+}.items():
+    for _b in _bases:
+        _COV_LETTERS[_b + _mark] = (ord(toUnicode(_b + _mark)), _b, _mark)
+_COV_LETTERS.update({
+    "Scedilla": (0x015E, "S", "cedilla"), "scedilla": (0x015F, "s", "cedilla"),
+    "Tcedilla": (0x0162, "T", "cedilla"), "tcedilla": (0x0163, "t", "cedilla"),
+    "Scommaaccent": (0x0218, "S", "commaaccent"), "scommaaccent": (0x0219, "s", "commaaccent"),
+    "uni021A": (0x021A, "T", "commaaccent"), "uni021B": (0x021B, "t", "commaaccent"),
+    "Gcommaaccent": (0x0122, "G", "commaaccent"), "gcommaaccent": (0x0123, "g", "commaturned"),
+    "Kcommaaccent": (0x0136, "K", "commaaccent"), "kcommaaccent": (0x0137, "k", "commaaccent"),
+    "Lcommaaccent": (0x013B, "L", "commaaccent"), "lcommaaccent": (0x013C, "l", "commaaccent"),
+    "Ncommaaccent": (0x0145, "N", "commaaccent"), "ncommaaccent": (0x0146, "n", "commaaccent"),
+    "Rcommaaccent": (0x0156, "R", "commaaccent"), "rcommaaccent": (0x0157, "r", "commaaccent"),
+})
+for _name, (_u, _b, _mark) in _COV_LETTERS.items():
+    if _b == "i" and _mark != "ogonek":  # ī ĭ: the dotless i under the mark, spaced like igrave
+        GLYPHS[_name] = (_u, _ac_composite("dotlessi", _mark))
+    elif _mark in ("cedilla", "commaaccent"):
+        GLYPHS[_name] = (_u, _cov_below(_b, _mark))
+    else:
+        GLYPHS[_name] = (_u, _ac_composite(_b, _mark))
+GLYPHS["lacute"] = (0x013A, _cov_lacute)
+
+# Spacing marks missing from Latin-1 / CP1250 / CP1252.
+for _mark in ("breve", "circumflex", "tilde"):
+    GLYPHS[_mark] = (ord(toUnicode(_mark)), _ac_spacing(_mark))
+
+
+@glyph("Hbar")
+def _Hbar(g):
+    w = g.wn * 1.2
+    y = 0.76 * g.C
+    return [*_cov("H")(g), LN(-0.12 * g.wn, y, w + 0.12 * g.wn, y, 0.7)]
+
+
+@glyph("hbar")
+def _hbar(g):
+    y = (g.X + g.A) / 2 + 20
+    return [*_cov("h")(g), LN(-g.wn * 0.2, y, g.wn * 0.24, y, 0.8)]
+
+
+@glyph("longs")
+def _longs(g):
+    return _cov("f")(g)[:1]
+
+
+@glyph("uni0237")
+def _dotlessj(g):
+    return [hook_left(g, 0, g.yx, g.wn * 0.34)]
+
+
+@glyph("uni1E9E")
+def _Germandbls(g):
+    """Capital sharp s: a flat top, a diagonal into the lower bowl of a 3."""
+    w = g.wn * 0.9 + 1.3 * g.a  # widens with the pen so the counter under the diagonal stays open at 900
+    ym = 0.54 * g.C
+    rl = 0.42 * w
+    hl = (ym - (g.b - g.ovC)) / 2
+    cl = w - rl
+    xd = w * 0.3 + 1.2 * g.a
+    return [
+        S(LN(0, g.yb, 0, g.yC), LN(0, g.yC, w * 0.9, g.yC), LN(w * 0.9, g.yC, xd, ym)),
+        S(LN(xd, ym, cl, ym), ARC(cl, ym - hl, rl, hl, 90, -115, 1, g.dot * 1.05, 0, 0.8)),
+    ]
+
+
+# ---------------------------------------------------------------- coverage: symbols
+
+
+@glyph("quotesinglbase", 0x201A)
+def _quotesinglbase(g):
+    return [tick(g, 0, 2 * g.pdot * g.a)]
+
+
+@glyph("quotedblbase", 0x201E)
+def _quotedblbase(g):
+    d = 2 * g.a * g.pdot + 90
+    y = 2 * g.pdot * g.a
+    return [tick(g, 0, y), tick(g, d, y)]
+
+
+def _cov_sup(strokes, k, s, x0, y0):
+    """Strokes shrunk by k about the origin, the pen scaled by s, moved to (x0, y0): superiors, ordinals."""
+    return [[(x0 + x * k, y0 + y * k, sc * s, r) for x, y, sc, r in st] for st in strokes]
+
+
+def _cov_ring(g):
+    """Outer ring of © and ®: cap height including overshoot. Returns (rx, ry, pen scale)."""
+    so = 0.66
+    ry = g.C / 2 + g.ovC - so * g.b
+    return ry * 1.02, ry, so
+
+
+def _cov_inner(g):
+    return 0.557 - 0.00158 * g.a  # like @'s inner stroke: 0.5 at 300, 0.38 at 900, so counters stay open
+
+
+@glyph("copyright")
+def _copyright(g):
+    rx, ry, so = _cov_ring(g)
+    si = _cov_inner(g)
+    cy = g.C / 2
+    ri, riy = 0.5 * rx, 0.52 * ry
+    return [
+        ARC(rx, cy, rx, ry, 0, 360, so),
+        ARC(rx + 0.04 * rx, cy, ri, riy, 45, 315, si * 1.15, si * 1.15, 0.7, 0.7),
+    ]
+
+
+@glyph("registered")
+def _registered(g):
+    rx, ry, so = _cov_ring(g)
+    si = _cov_inner(g)
+    cy = g.C / 2
+    h = 0.5 * ry
+    x0 = rx - 0.36 * rx
+    top, mid, bot = cy + h, cy - 0.08 * h, cy - h
+    rby = (top - mid) / 2
+    xc = x0 + 0.38 * rx
+    return [
+        ARC(rx, cy, rx, ry, 0, 360, so),
+        LN(x0, top, x0, bot, si),
+        S(LN(x0, top, xc, top, si), ARC(xc, mid + rby, rby * 1.05, rby, 90, -90, si), LN(xc, mid, x0, mid, si)),
+        LN(xc - 0.05 * rx, mid, x0 + 0.72 * rx, bot, si * 0.9, si),
+    ]
+
+
+@glyph("degree")
+def _degree(g):
+    s = 0.55
+    rr = 80 + 0.5 * g.a
+    return [ARC(rr, g.C - rr - s * g.b, rr, rr, 0, 360, s)]
+
+
+@glyph("plusminus")
+def _plusminus(g):
+    w = _fig_op_w(g)
+    yp = 0.65 * g.C
+    h = 0.36 * w
+    ym = yp - h - 0.85 * g.b - (60 + 0.4 * g.a) - 0.9 * g.b
+    return [LN(0, yp, w, yp, 0.9), LN(w / 2, yp - h, w / 2, yp + h, 0.85), LN(0, ym, w, ym, 0.9)]
+
+
+@glyph("logicalnot")
+def _logicalnot(g):
+    w = _fig_op_w(g)
+    y = _fig_op_y(g) + 50
+    return [S(LN(0, y, w, y, 0.9), LN(w, y, w, y - 0.32 * w, 0.9))]
+
+
+@glyph("section")
+def _section(g):
+    """Two s curves overlapping in a closed middle loop."""
+    top = g.C + g.ov - 0.85 * g.b
+    bot = -110 + 0.85 * g.b
+    h = (top - bot) / 1.5
+    rx = g.wn * 0.42
+    up = s_shape(g, rx, rx, top, top - h)
+    lo = s_shape(g, rx, rx, top - h / 2, bot)
+    return [[(x, y, s * 0.85, r) for x, y, s, r in st] for st in up + lo]
+
+
+@glyph("paragraph")
+def _paragraph(g):
+    rb = 0.22 * g.C + 0.2 * g.a  # filled bowl radius, linear in a
+    x1 = rb * 1.6
+    x2 = x1 + 1.6 * g.a + 110
+    yc = g.C - rb
+    return [
+        S(DOT(x1 - rb * 0.6, yc, rb / g.a), LN(x1 - rb * 0.6, yc, x1, yc, rb / g.a, rb / g.a, 1, 1)),
+        LN(x1, g.C - 0.8 * g.b, x1, g.yb, 0.8),
+        S(LN(x1, g.C - 0.8 * g.b, x2, g.C - 0.8 * g.b, 0.8), LN(x2, g.C - 0.8 * g.b, x2, g.yb, 0.8)),
+    ]
+
+
+@glyph("mu")
+def _mu(g):
+    return [*_cov("u")(g), LN(0, 0.58 * g.X, 0, g.yD)]
+
+
+@glyph("cent")
+def _cent(g):
+    rx = _lc_rx(g) - 5
+    return [*_cov("c")(g), LN(rx * 0.95, -80, rx * 0.95, g.X + 80, 0.55)]
+
+
+@glyph("yen")
+def _yen(g):
+    w = g.wn * 1.2
+    y1 = 0.36 * g.C
+    y2 = y1 - (2 * 0.6 * g.b + 30 + 0.3 * g.a)
+    return [*_cov("Y")(g), LN(w * 0.18, y1, w * 0.82, y1, 0.6), LN(w * 0.18, y2, w * 0.82, y2, 0.6)]
+
+
+@glyph("currency")
+def _currency(g):
+    rr = 115 + 0.35 * g.a
+    cx, cy = rr + 60 + 0.4 * g.a, _fig_op_y(g)
+    out = [ARC(cx, cy, rr, rr, 0, 360, 0.7)]
+    for ang in (45, 135, 225, 315):
+        out.append(LN(*at(cx, cy, rr, rr, ang), *at(cx, cy, rr + 60 + 0.4 * g.a, rr + 60 + 0.4 * g.a, ang), 0.7))
+    return out
+
+
+@glyph("brokenbar")
+def _brokenbar(g):
+    t, b = g.C + 110, g.D + 60
+    m, d = (t + b) / 2, 50 + 0.75 * g.b
+    return [LN(0, t, 0, m + d, 0.75), LN(0, m - d, 0, b, 0.75)]
+
+
+@glyph("florin")
+def _florin(g):
+    rf = g.wn * 0.32
+    yt = g.yA - rf * 0.8
+    return [
+        S(ARC(rf, yt, rf, rf * 0.8, 45, 180, g.dot * 1.1, 1, 1, 0), hook_left(g, 0, yt, g.wn * 0.32)),
+        LN(-g.wn * 0.24, g.yx, g.wn * 0.3, g.yx, 0.85),
+    ]
+
+
+@glyph("dagger")
+def _dagger(g):
+    w = g.wn * 0.8
+    return [LN(w / 2, g.yC, w / 2, g.D + 60, 0.8), LN(0, 0.64 * g.C, w, 0.64 * g.C, 0.8)]
+
+
+@glyph("daggerdbl")
+def _daggerdbl(g):
+    w = g.wn * 0.8
+    return [
+        LN(w / 2, g.yC, w / 2, g.D + 60, 0.8),
+        LN(0, 0.66 * g.C, w, 0.66 * g.C, 0.8),
+        LN(0, 0.05 * g.C, w, 0.05 * g.C, 0.8),
+    ]
+
+
+@glyph("perthousand")
+def _perthousand(g):
+    r = g.wn * 0.26 + g.a * 0.5
+    w = 4 * r + 60
+    ry = 0.19 * g.C
+    return [*_cov("percent")(g), ARC(w + r + 40 + 0.6 * g.a, ry + g.b, r, ry, 0, 360, 0.7)]
+
+
+@glyph("trademark")
+def _trademark(g):
+    k, s = 0.46, 0.55
+    y0 = g.C - k * g.C
+    xm = k * g.wn * 1.15 + 2 * s * g.a + 50
+    return [*_cov_sup(_cov("T")(g), k, s, 0, y0), *_cov_sup(_cov("M")(g), k, s, xm, y0)]
+
+
+def _cov_ordinal(g, base):
+    k, s = 0.55, 0.6
+    y0 = g.C - k * g.X
+    strokes = _cov_sup(_cov(base)(g), k, s, 0, y0)
+    lo, hi = _ac_xspan(strokes)
+    yu = y0 - 50 - 0.5 * g.b - 0.2 * g.a
+    return [*strokes, LN(lo, yu, hi, yu, 0.5)]
+
+
+@glyph("ordfeminine")
+def _ordfeminine(g):
+    return _cov_ordinal(g, "a")
+
+
+@glyph("ordmasculine")
+def _ordmasculine(g):
+    return _cov_ordinal(g, "o")
+
+
+_COV_FIG_K, _COV_FIG_S = 0.55, 0.62
+
+
+def _cov_superior(g, fig, x0=0, low=False):
+    k = _COV_FIG_K
+    return _cov_sup(_cov(fig)(g), k, _COV_FIG_S, x0, 0 if low else g.C - k * g.C)
+
+
+@glyph("onesuperior")
+def _onesuperior(g):
+    return _cov_superior(g, "one")
+
+
+@glyph("twosuperior")
+def _twosuperior(g):
+    return _cov_superior(g, "two")
+
+
+@glyph("threesuperior")
+def _threesuperior(g):
+    return _cov_superior(g, "three")
+
+
+def _cov_fraction(g, num, den):
+    """Superior numerator, fraction bar leaning between, inferior denominator."""
+    k, s = _COV_FIG_K, _COV_FIG_S
+    nw = _ac_xspan(_cov(num)(g))[1] * k
+    xs = nw + 0.4 * g.a
+    slash = LN(xs - 60, g.b * 0.6, xs + 0.35 * g.C, g.C - g.b * 0.6, 0.6)
+    return [*_cov_superior(g, num), slash, *_cov_superior(g, den, xs + 0.12 * g.C + 1.2 * s * g.a, True)]
+
+
+@glyph("onequarter")
+def _onequarter(g):
+    return _cov_fraction(g, "one", "four")
+
+
+@glyph("onehalf")
+def _onehalf(g):
+    return _cov_fraction(g, "one", "two")
+
+
+@glyph("threequarters")
+def _threequarters(g):
+    return _cov_fraction(g, "three", "four")
+
+
+# ---------------------------------------------------------------- coverage: combining marks
+# Zero-width (build.py's zero_width hook), centred on x = 0, drawn where the precomposed marks sit: top marks
+# over the x-height, their .case variants over the cap height (ccmp swaps them in after capitals and
+# ascenders), marks below at the baseline. features.py composes base + mark into the precomposed glyphs and
+# positions the rest with anchors at mark_x().
+COMBINING: dict[str, str] = {}  # name -> anchor class: "top", "top.case", "bottom" or "ogonek"
+
+
+def _cov_combining(mark, cap):
+    def fn(g):
+        return _AC_DRAW[mark](g, 0, _ac_zone(g, cap))
+
+    return fn
+
+
+for _u, _mark in {
+    0x0300: "grave", 0x0301: "acute", 0x0302: "circumflex", 0x0303: "tilde", 0x0304: "macron", 0x0306: "breve",
+    0x0307: "dotaccent", 0x0308: "dieresis", 0x030A: "ring", 0x030B: "hungarumlaut", 0x030C: "caron",
+}.items():
+    GLYPHS[f"uni{_u:04X}"] = (_u, _cov_combining(_mark, False))
+    COMBINING[f"uni{_u:04X}"] = "top"
+for _u, _mark in {
+    0x0300: "grave", 0x0301: "acute", 0x0302: "circumflex", 0x0303: "tilde", 0x0304: "macron", 0x0306: "breve",
+    0x0307: "dotaccent", 0x0308: "dieresis", 0x030A: "ring", 0x030B: "hungarumlaut", 0x030C: "caron",
+}.items():
+    GLYPHS[f"uni{_u:04X}.case"] = (None, _cov_combining(_mark, True))
+    COMBINING[f"uni{_u:04X}.case"] = "top.case"
+for _u, _mark, _kind in ((0x0326, "commaaccent", "bottom"), (0x0327, "cedilla", "bottom"), (0x0328, "ogonek", "ogonek")):
+    GLYPHS[f"uni{_u:04X}"] = (_u, _cov_combining(_mark, False))
+    COMBINING[f"uni{_u:04X}"] = _kind
+
+SPACING.update({
+    "imacron": (0.50, T, T), "ibreve": (0.50, T, T), "itilde": (0.50, T, T),
+    "Hbar": (1.24, 0.4, 0.4), "hbar": (1.00, 0.4, 1), "uni0237": (0.50, T, 1), "uni1E9E": (1.15, 1, R),
+    "cent": (0.85, R, R), "yen": (1.08, D, D),
+})
+BASE_OF.update({n: ("i" if b == "i" and m != "ogonek" else b) for n, (_, b, m) in _COV_LETTERS.items()})
+BASE_OF.update(lacute="l", mu="u")

@@ -54,6 +54,13 @@ in the same direction k in every master, and the heuristic matches near-identica
   shape at both weights (`MARK_TOL`) share one glyph, drawn around (0, 0) and named after the first letter that uses
   it (`aacute.mark` also serves `eacute`); the composite's offset places it, and gvar varies the offset. A composite
   whose first strokes don't equal its base's strokes is drawn as a plain glyph instead.
+- **Combining marks and layout** (`features.py`): U+0300–030C, 0326–0328 are zero-width glyphs in `glyphs.py`
+  (`COMBINING`; build.py's `zero_width()` hook zeroes their advance), drawn where the precomposed marks sit, with
+  `.case` variants over the cap height. `ot_features()` emits, per master: `ccmp` (base + mark → the precomposed
+  glyph, from Unicode's canonical decompositions; i/j → dotless before a mark above; a mark above after a capital
+  or ascender → `.case`), `locl` for Romanian/Moldavian ş ţ → ș ț, and `mark` anchors at `mark_x()` (the same x the
+  composites use), stacking above a mark a letter already carries. Its classes must not depend on the weight, or
+  varLib can't merge GSUB. `set_code_pages()` sets an OS/2 code page bit only when the whole page is mapped.
 - **`build.py`**: the pen is an ellipse (half-width `a`, half-height `b`, per weight in `WEIGHTS`). Every pair of
   consecutive samples becomes one convex hull of two ellipses, sampled at `K` = 24 fixed directions and written as an
   all-off-curve TrueType contour. A glyph is therefore many overlapping convex contours, never a boolean union
