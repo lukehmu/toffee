@@ -226,7 +226,7 @@ def build_master(wght, slnt, shdw):
     n_adv = g.wn + 2 * a + 2 * p.sb  # every width class is a ratio of this
     t = SLANTS[slnt]
     order = [".notdef", "space"]
-    cmap = {0x20: "space", 0xA0: "space", 0xAD: "hyphen"}
+    cmap = {0x20: "space", 0xA0: "space"}
     glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
     space_adv = round(0.3 * g.wn + 120)
     adv = {".notdef": 500, "space": space_adv}

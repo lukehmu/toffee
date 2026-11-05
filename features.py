@@ -5,7 +5,8 @@
   or an ascender -> its .case variant.
 - locl: Romanian and Moldavian ş ţ -> ș ț (comma below).
 - mark: anchors for every letter, so combinations with no precomposed glyph still land in place.
-- Code pages: a bit is set only when every character of that Windows code page is in the cmap.
+- Code pages: a bit is set only when every character of that code page is in the cmap (the soft hyphen
+  excepted: it is a format control that renderers handle without a glyph, and fontbakery warns if mapped).
 
 Every master emits the same lookups with different anchor values, so varLib can merge GSUB/GPOS.
 """
@@ -178,7 +179,7 @@ def set_code_pages(font):
                 c = bytes([byte]).decode(codec)
             except UnicodeDecodeError:
                 continue
-            if c.isprintable() or c == "\xad":
+            if c.isprintable() or c == "\xa0":  # not the soft hyphen, a format control (fontbakery)
                 chars.append(ord(c))
         if all(c in cmap for c in chars):
             bits |= 1 << bit
