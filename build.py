@@ -51,7 +51,7 @@ PALETTES = [
     [(0.0, 0.0, 0.0, 1.0), (1.0, 0.82, 0.25, 1.0)],  # black shadow, yellow face
     [(0.98, 0.45, 0.62, 1.0), (0.12, 0.12, 0.2, 1.0)],  # pink shadow, ink face
 ]
-PALETTE_NAMES = ["Chocolate", "Orange", "Black", "Pink"]  # CPAL labels, named after the shadow colour
+PALETTE_NAMES = ["Toffee", "Orange and white", "Black and yellow", "Pink and ink"]  # CPAL labels = index.html PRESETS names
 PALETTE_ENTRIES = ["Shadow", "Face"]  # what palette index 0 and 1 paint
 STYLES = [(300, "Light"), (400, "Regular"), (500, "Medium"), (600, "SemiBold"), (700, "Bold"), (800, "ExtraBold"), (900, "Black")]
 SHADOW_STYLES = [(0, "Outline"), (400, "Drop"), (1000, "Long")]  # SHDW names (STAT); 0 is elided
