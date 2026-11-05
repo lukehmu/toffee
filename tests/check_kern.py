@@ -17,23 +17,41 @@ sys.path.insert(0, str(ROOT))
 from fontTools.ttLib import TTFont  # noqa: E402
 from fontTools.varLib.instancer import instantiateVariableFont  # noqa: E402
 
+import build  # noqa: E402
 import kern  # noqa: E402
 
 VF = ROOT / "fonts" / "Toffee[SHDW,slnt,wght].ttf"
-MIN_EXTRA = 4  # units above the border; kern.py aims for MARGIN (8)
+MIN_EXTRA = 4  # units above the border that must remain; kern.py aims for kern.MARGIN, with vertical slack
 
 
 def pairs_of(font):
+    """{(left, right): x advance adjustment} from every PairPos subtable (glyph pairs and class pairs)."""
     out = {}
+    order = font.getGlyphOrder()
     for lk in font["GPOS"].table.LookupList.Lookup:
         for st in lk.SubTable:
-            if st.LookupType == 9:
+            if lk.LookupType == 9:
                 st = st.ExtSubTable
-            if st.Format != 1:
-                raise SystemExit("unexpected PairPos format")
-            for left, ps in zip(st.Coverage.glyphs, st.PairSet):
-                for rec in ps.PairValueRecord:
-                    out[(left, rec.SecondGlyph)] = rec.Value1.XAdvance if rec.Value1 else 0
+            if st.LookupType != 2:
+                continue
+            if st.Format == 1:
+                for left, ps in zip(st.Coverage.glyphs, st.PairSet):
+                    for rec in ps.PairValueRecord:
+                        out.setdefault((left, rec.SecondGlyph), rec.Value1.XAdvance if rec.Value1 else 0)
+            elif st.Format == 2:
+                c1, c2 = st.ClassDef1.classDefs, st.ClassDef2.classDefs
+                rights = {}
+                for g in order:  # class 0 of ClassDef2 is every glyph not listed
+                    rights.setdefault(c2.get(g, 0), []).append(g)
+                for left in st.Coverage.glyphs:
+                    row = st.Class1Record[c1.get(left, 0)].Class2Record
+                    for cls, glyphs in rights.items():
+                        v = row[cls].Value1.XAdvance if row[cls].Value1 else 0
+                        if v:
+                            for right in glyphs:
+                                out.setdefault((left, right), v)
+            else:
+                raise SystemExit(f"unexpected PairPos format {st.Format}")
     return out
 
 
@@ -53,8 +71,7 @@ def measure(wght):
                 cs.append(list(coords[s : e + 1]))
                 s = e + 1
         faces[n], adv[n] = cs, f["hmtx"][n][0]
-    a = 36 + (wght - 300) * (112 - 36) / 600
-    border = 24 + 0.21 * a
+    border = build.pen_params(*build.pen_at(wght)).border
     fc = kern.Faces(faces, adv, border, v_slack=0)  # the true paint-model rule, no kerning slack
     ps = pairs_of(f)
     worst = (1e9, None)
