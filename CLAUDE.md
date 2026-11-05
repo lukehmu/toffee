@@ -113,5 +113,8 @@ incompatibility error.
 
 - `fonts/` is committed on purpose (the release files that Pages links to). Rebuild and commit it together with any
   `glyphs.py` or `build.py` change.
+- After a visible glyph change, regenerate the README/og specimen (`docs/specimen.png`, commands at the top of
+  `docs/specimen.html`) and the favicon: `uv run docs/favicon.py "fonts/Toffee[SHDW,slnt,wght].ttf" favicon.svg`.
+- New characters also go in the demo's glyph grid (`chars` in `index.html`) and the README's character set.
 - To change the colours a user sees, edit `PALETTES` (and its `PALETTE_NAMES` labels) in `build.py` (CPAL). The page's
   presets in `index.html` mirror them.

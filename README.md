@@ -18,14 +18,17 @@ Axes:
 CPAL palettes (index 0 = shadow and outline, 1 = face): 0 toffee, 1 orange/white, 2 black/yellow, 3 pink/ink.
 
 **Browser support.** The outline and shadow are colour layers. Chrome and Edge 98+ and Firefox 107+ draw them in
-full colour (COLRv1). Safari and iOS don't support COLRv1: they draw the colours only from COLRv0 layers, and show the
-plain monochrome face without them, as any non-colour renderer does. Choosing a palette (`font-palette`,
+full colour (COLRv1). Safari and iOS don't support COLRv1, so the font also carries COLRv0 layers: the same outline
+and shadow in flat colours. Renderers with no colour support show the plain monochrome face. Choosing a palette (`font-palette`,
 `@font-palette-values`) needs Chrome or Edge 101+, Firefox 107+ or Safari 15.4+. To feature-detect COLRv1:
 `CSS.supports("font-tech(color-COLRv1)")` (Chrome 108+, Firefox 106+, Safari 17+; older browsers answer false).
 
-**Character set.** 235 characters: Basic Latin, all Latin-1 letters (À–ÿ), Œ œ Š š Ž ž Ÿ ı, and the Central
-European letters Ą Ć Č Ď Đ Ę Ě Ľ Ł Ń Ň Ő Ŕ Ř Ś Ť Ů Ű Ź Ż, with their lowercase. Also curly quotes, « » ‹ ›, ¡ ¿,
-dashes, ellipsis, × ÷ − £ €. Kerning is generated from the outlines at every weight.
+**Character set.** 357 characters, covering Windows code pages 1250, 1252, 1254 and 1257: Basic Latin and
+Latin-1 (letters and symbols), Œ œ Š š Ž ž Ÿ ı ȷ ſ ẞ, and the Central European, Romanian (Ș Ț Ă), Turkish
+(İ Ğ Ş), Baltic (Ā Ē Ī Ū Ė Į Ų Ģ Ķ Ļ Ņ), Welsh (Ŵ Ŷ Ẁ Ẃ Ẅ Ỳ) and Maltese (Ħ Ġ Ċ) letters, with their lowercase.
+Also curly and low quotes („ ‚), « » ‹ ›, ¡ ¿, dashes, ellipsis, † ‡ ‰ ™, × ÷ − ± £ € ¢ ¥, and 14 combining
+accents: decomposed text (a letter followed by U+0300–U+0328) is composed by `ccmp` or placed by `mark`, and
+`locl` gives Romanian ș ț. Kerning is generated from the outlines at every weight.
 
 In CSS:
 

@@ -150,8 +150,8 @@
 <footer>Toffee is a COLRv1 variable font with axes <code>wght</code> 300–900, <code>slnt</code> −12–0 and <code>SHDW</code> 0–1000.
   Licensed under the <a href="https://openfontlicense.org">SIL Open Font License 1.1</a>.
   The outline and shadow are colour layers: Chrome and Edge 98+ and Firefox 107+ draw them in full colour (COLRv1).
-  Safari and iOS don't support COLRv1; they draw the colours only from COLRv0 layers, and show the plain face without
-  them. Choosing a palette with <code>font-palette</code> needs Chrome or Edge 101+, Firefox 107+ or Safari 15.4+.</footer>
+  Safari and iOS don't support COLRv1; the font also carries COLRv0 layers (the same outline and shadow, in flat
+  colours) for them. Choosing a palette with <code>font-palette</code> needs Chrome or Edge 101+, Firefox 107+ or Safari 15.4+.</footer>
 
 <script>
   const root = document.documentElement;
@@ -287,7 +287,9 @@ h1 {
 
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.,:;'\"()[]{}/\\|-–—+−×÷=<>*#%$£€&@…“”‘’«»‹›¡¿•·_~^" +
     "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ" +
-    "ĄąĆćČčĎďĐđĘęĚěıĽľŁłŃńŇňŐőŒœŔŕŘřŚśŠšŤťŮůŰűŸŹźŻżŽž";
+    "ĄąĆćČčĎďĐđĘęĚěıĽľŁłŃńŇňŐőŒœŔŕŘřŚśŠšŤťŮůŰűŸŹźŻżŽž" +
+    "ĀāĂăĊċĒēĔĕĖėĞğĠġĢģĦħĨĩĪīĬĭĮįİĶķĹĺĻļŅņŌōŎŏŖŗŞşŢţŨũŪūŬŭŲųŴŵŶŷſǓǔȘșȚțȷẀẁẂẃẄẅẞẼẽỲỳ" +
+    "‚„†‡‰™`¢¤¥¦§©ª¬®°±²³µ¶¹º¼½¾ƒ¨¯´¸ˆˇ˘˙˚˛˜˝";
   const grid = document.getElementById("grid");
   for (const c of chars) {
     const b = document.createElement("button");
