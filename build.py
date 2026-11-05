@@ -4,6 +4,7 @@
 # ///
 """Build Toffee: a COLRv1 variable font (wght, slnt, SHDW) from glyphs.py skeletons."""
 
+import functools
 import math
 import os
 from pathlib import Path
@@ -38,6 +39,7 @@ VERSION = 1.0
 VERSION_STRING = "Version 1.000"
 RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
 FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide"]]
+MARK_TOL = 1.0  # accent marks whose skeletons match this closely (at both weights) share one glyph
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
 SLANTS = (0, -12)  # slnt masters, degrees (shear = tan of the angle)
@@ -234,10 +236,11 @@ def place_composite(strokes, n_base, base_placed):
     return out, dx, adv, k, sk0
 
 
-def compound(names):
-    pen = TTGlyphPen(set(names))  # the pen only checks that component names exist
-    for n in names:
-        pen.addComponent(n, (1, 0, 0, 1, 0, 0))
+def compound(base, mark, offset):
+    """A TrueType composite: base at the origin, mark moved by offset."""
+    pen = TTGlyphPen({base, mark})  # the pen only checks that component names exist
+    pen.addComponent(base, (1, 0, 0, 1, 0, 0))
+    pen.addComponent(mark, (1, 0, 0, 1, *offset))
     g = pen.glyph()
     g.components[0].flags |= 0x0400  # OVERLAP_COMPOUND: the components overlap
     return g
@@ -264,56 +267,134 @@ def pen_at(wght):
     return a0 + (a1 - a0) * f, b0 + (b1 - b0) * f
 
 
-def build_master(wght, slnt, shdw):
-    """One master. Any location builds (tests compare in-between VF instances with direct builds)."""
+def _same(u, v):
+    return all(abs(i - j) < 1e-6 for i, j in zip(u, v))
+
+
+@functools.cache
+def _kept(name):
+    """Per stroke, the sample indices to keep.
+
+    A sample equal to the one before it at every weight master (S() joining two parts at a shared point)
+    makes a zero-length segment: one more contour that adds nothing. Deciding over all weights keeps the
+    point count the same in every master; a stroke's first sample always stays, so dots keep their one.
+    """
+    per_w = [GLYPHS[name][1](geo(pen_params(*ab))) for ab in WEIGHTS.values()]
+    return [
+        [j for j in range(len(st)) if j == 0 or not all(_same(sw[i][j - 1], sw[i][j]) for sw in per_w)]
+        for i, st in enumerate(per_w[0])
+    ]
+
+
+def skeleton(name, g):
+    """glyphs.py's strokes for a glyph, without zero-length segments."""
+    return [[st[j] for j in keep] for st, keep in zip(GLYPHS[name][1](g), _kept(name))]
+
+
+@functools.cache
+def layout(wght):
+    """Pen, metrics and placed skeletons at one weight (slant and shadow don't change them).
+
+    Returns (p, g, placed, composite_of): placed[name] = (strokes, dx, advance, k, sk0), and
+    composite_of[accented glyph] = (base glyph, number of base strokes).
+    """
     a, b = pen_at(wght)
     p = pen_params(a, b)
     g = geo(p)
     n_adv = g.wn + 2 * a + 2 * p.sb  # every width class is a ratio of this
-    t = math.tan(math.radians(-slnt))
-    order = [".notdef", "space"]
-    cmap = {0x20: "space", 0xA0: "space"}
-    glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
-    space_adv = round(0.3 * g.wn + 120)
-    adv = {".notdef": 500, "space": space_adv}
     clamped = []
     placed = {}
-    composite_of = {}  # accented glyph -> (base glyph, number of base strokes)
-    for name, (_, fn) in GLYPHS.items():
-        strokes = fn(g)
+    composite_of = {}
+    for name in GLYPHS:
+        strokes = skeleton(name, g)
         base = BASE_OF.get(name)
-        base_strokes = GLYPHS[base][1](g) if base in GLYPHS else None
+        base_strokes = skeleton(base, g) if base in GLYPHS else None
         if base_strokes is not None and strokes[: len(base_strokes)] == base_strokes:
             continue  # placed below, from its base
         placed[name] = place(name, strokes, p, g, n_adv, clamped)
-    for name, (_, fn) in GLYPHS.items():
+    for name in GLYPHS:
         if name not in placed:
             base = BASE_OF[name]
             if base in placed:
-                n_base = len(GLYPHS[base][1](g))
-                placed[name] = place_composite(fn(g), n_base, placed[base])
+                n_base = len(skeleton(base, g))
+                placed[name] = place_composite(skeleton(name, g), n_base, placed[base])
                 composite_of[name] = (base, n_base)
             else:  # base is itself a composite: just space it normally
-                placed[name] = place(name, fn(g), p, g, n_adv, clamped)
-    if clamped and slnt == 0 and shdw == 0:
+                placed[name] = place(name, skeleton(name, g), p, g, n_adv, clamped)
+    if clamped:
         print(f"wght {wght}: width class out of scale range, clamped:", " ".join(clamped))
     for group in FIXED_WIDTH:  # one advance for the group, each glyph centred in it
         width = max(placed[n][2] for n in group)
         for n in group:
             st, dx, advance, *rest = placed[n]
             placed[n] = (st, dx + (width - advance) / 2, width, *rest)
+    return p, g, placed, composite_of
+
+
+def mark_strokes(placed, composite_of, name):
+    """An accented glyph's mark strokes relative to their centroid, and the centroid."""
+    strokes = placed[name][0][composite_of[name][1] :]
+    pts = [(x, y) for st in strokes for x, y, *_ in st]
+    cx, cy = sum(x for x, _ in pts) / len(pts), sum(y for _, y in pts) / len(pts)
+    return [[(x - cx, y - cy, s, r) for x, y, s, r in st] for st in strokes], (cx, cy)
+
+
+@functools.cache
+def mark_glyphs():
+    """{accented glyph: its mark glyph}. Marks with the same shape at both weights share one glyph.
+
+    The same accent is drawn once and placed by the composite's offset, which varies per master.
+    Named after the first glyph that uses it.
+    """
+    lays = [layout(w) for w in WEIGHTS]
+    assert all(lay[3] == lays[0][3] for lay in lays), "composites differ between weight masters"
+
+    def close(m1, m2):
+        return [len(st) for st in m1] == [len(st) for st in m2] and all(
+            abs(a[0] - b[0]) <= MARK_TOL and abs(a[1] - b[1]) <= MARK_TOL and _same(a[2:], b[2:])
+            for s1, s2 in zip(m1, m2)
+            for a, b in zip(s1, s2)
+        )
+
+    shapes, out = [], {}
+    for name in lays[0][3]:
+        sig = [mark_strokes(lay[2], lay[3], name)[0] for lay in lays]
+        for other, mark in shapes:
+            if all(close(a, b) for a, b in zip(sig, other)):
+                out[name] = mark
+                break
+        else:
+            shapes.append((sig, name + ".mark"))
+            out[name] = name + ".mark"
+    return out
+
+
+def build_master(wght, slnt, shdw):
+    """One master. Any location builds (tests compare in-between VF instances with direct builds)."""
+    p, g, placed, composite_of = layout(wght)
+    marks = mark_glyphs()
+    t = math.tan(math.radians(-slnt))
+    order = [".notdef", "space"]
+    cmap = {0x20: "space", 0xA0: "space"}
+    glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
+    space_adv = round(0.3 * g.wn + 120)
+    adv = {".notdef": 500, "space": space_adv}
     for name, (uni, _) in GLYPHS.items():
         strokes, dx, advance, *_ = placed[name]
         if name in composite_of:
-            # TrueType composite: the base glyph's outline (identical by construction) plus a mark glyph.
-            base, n_base = composite_of[name]
-            mark = name + ".mark"
-            glyf[mark] = to_glyph(outline(strokes[n_base:], p, dx, t))
-            glyf[mark + ".shadow"] = to_glyph(outline(strokes[n_base:], p, dx, t, shadow=float(shdw)))
-            glyf[name] = compound([base, mark])
-            glyf[name + ".shadow"] = compound([base + ".shadow", mark + ".shadow"])
-            adv[mark] = adv[mark + ".shadow"] = advance
-            order += [mark, mark + ".shadow"]
+            # TrueType composite: the base glyph's outline (identical by construction) plus a mark glyph,
+            # drawn around (0, 0) and moved into place. Shear about Y0 turns a move (x, y) into (x + t*y, y).
+            base, _ = composite_of[name]
+            mark = marks[name]
+            rel, (cx, cy) = mark_strokes(placed, composite_of, name)
+            if mark not in glyf:
+                glyf[mark] = to_glyph(outline(rel, p, 0, t))
+                glyf[mark + ".shadow"] = to_glyph(outline(rel, p, 0, t, shadow=float(shdw)))
+                adv[mark] = adv[mark + ".shadow"] = 0
+                order += [mark, mark + ".shadow"]
+            offset = (round(cx + dx + t * cy), round(cy))
+            glyf[name] = compound(base, mark, offset)
+            glyf[name + ".shadow"] = compound(base + ".shadow", mark + ".shadow", offset)
         else:
             glyf[name] = to_glyph(outline(strokes, p, dx, t))
             glyf[name + ".shadow"] = to_glyph(outline(strokes, p, dx, t, shadow=float(shdw)))
