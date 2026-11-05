@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
-from fontTools.colorLib.builder import buildCPAL  # noqa: F401  (import check)
+from fontTools.colorLib.builder import populateCOLRv0
 from fontTools.designspaceLib import AxisDescriptor, DesignSpaceDocument, InstanceDescriptor, SourceDescriptor
 from fontTools.fontBuilder import FontBuilder
 from fontTools.otlLib.builder import buildStatTable
@@ -51,6 +51,10 @@ PALETTES = [
     [(0.0, 0.0, 0.0, 1.0), (1.0, 0.82, 0.25, 1.0)],  # black shadow, yellow face
     [(0.98, 0.45, 0.62, 1.0), (0.12, 0.12, 0.2, 1.0)],  # pink shadow, ink face
 ]
+PALETTE_NAMES = ["Chocolate", "Orange", "Black", "Pink"]  # CPAL labels, named after the shadow colour
+PALETTE_ENTRIES = ["Shadow", "Face"]  # what palette index 0 and 1 paint
+STYLES = [(300, "Light"), (400, "Regular"), (500, "Medium"), (600, "SemiBold"), (700, "Bold"), (800, "ExtraBold"), (900, "Black")]
+SHADOW_STYLES = [(0, "Outline"), (400, "Drop"), (1000, "Long")]  # SHDW names (STAT); 0 is elided
 
 
 def hull(ells):
@@ -412,7 +416,8 @@ def build_master(wght, slnt, shdw):
         gl[n].recalcBounds(gl)
         metrics[n] = (adv[n], getattr(gl[n], "xMin", 0))
     fb.setupHorizontalMetrics(metrics)
-    fb.setupHorizontalHeader(ascent=930, descent=-300)
+    # Caret slope follows the slant; varLib puts the run in MVAR (hcrn), so in-between slants get it too.
+    fb.setupHorizontalHeader(ascent=930, descent=-300, caretSlopeRise=1000, caretSlopeRun=round(1000 * t))
     fb.setupNameTable({"familyName": FAMILY, "styleName": "Regular", "version": VERSION_STRING}, mac=False)
     fb.font["head"].fontRevision = VERSION
     fb.setupOS2(
@@ -422,12 +427,20 @@ def build_master(wght, slnt, shdw):
         sxHeight=g.X, sCapHeight=g.C, fsSelection=0x80 | 0x40,
         achVendID="NONE", version=4,
     )
-    fb.setupPost()
-    faces = {n: outline(placed[n][0], p, placed[n][1], 0.0) for n in GLYPHS}  # upright, at final x
-    fea = kern_feature(faces, {n: adv[n] for n in GLYPHS}, p, g)
+    # Underline half the pen's height thick, a little below the baseline; varies with weight (MVAR unds/undo).
+    fb.setupPost(italicAngle=slnt, underlineThickness=round(p.b), underlinePosition=-round(100 + p.b / 2))
+    fea = kern_fea(wght)
     if fea:
         fb.addOpenTypeFeatures(fea)
     return fb.font
+
+
+@functools.cache
+def kern_fea(wght):
+    """The kern feature at one weight, from the upright faces at their final x."""
+    p, g, placed, _ = layout(wght)
+    faces = {n: outline(placed[n][0], p, placed[n][1], 0.0) for n in GLYPHS}
+    return kern_feature(faces, {n: placed[n][2] for n in GLYPHS}, p, g)
 
 
 def main():
@@ -455,16 +468,22 @@ def main():
                 src.path = str(path)
                 src.location = {"Weight": w, "Slant": sl, "Shadow": sh}
                 doc.addSource(src)
-    for w, wname in [(300, "Light"), (400, "Regular"), (500, "Medium"), (600, "SemiBold"), (700, "Bold"), (800, "ExtraBold"), (900, "Black")]:
-        for sl, suffix in [(0, ""), (-12, " Oblique")]:
-            inst = InstanceDescriptor()
-            inst.familyName = FAMILY
-            inst.styleName = (wname + suffix).replace("Regular Oblique", "Oblique")
-            inst.location = {"Weight": w, "Slant": sl, "Shadow": 0}
-            doc.addInstance(inst)
+    # Named instances: every weight upright and oblique, plus a few with the shadow on.
+    named = [(w, sl, 0, (wname + suffix).replace("Regular Oblique", "Oblique"))
+             for w, wname in STYLES for sl, suffix in [(0, ""), (-12, " Oblique")]]
+    named += [(w, 0, sh, f"{wname} {sname}") for w, wname in [(700, "Bold"), (900, "Black")]
+              for sh, sname in SHADOW_STYLES[1:]]
+    for w, sl, sh, style in named:
+        inst = InstanceDescriptor()
+        inst.familyName = FAMILY
+        inst.styleName = style
+        inst.postScriptFontName = f"{FAMILY}-{style.replace(' ', '')}"
+        inst.location = {"Weight": w, "Slant": sl, "Shadow": sh}
+        doc.addInstance(inst)
     vf, _, _ = varLib.build(doc)
 
-    # COLRv1: each base glyph = its shadow layer (palette 0) under its face (palette 1).
+    # COLRv1: each base glyph = its shadow layer (palette 0) under its face (palette 1). The same two
+    # layers as COLRv0 records too, for renderers without v1 (Safari, older Windows); v1 renderers use v1.
     colr = {}
     clips = {}
     masters = [TTFont(s.path) for s in doc.sources]
@@ -486,26 +505,26 @@ def main():
         clips[name] = (min(b[0] for b in boxes) - 2, min(b[1] for b in boxes) - 2,
                        max(b[2] for b in boxes) + 2, max(b[3] for b in boxes) + 2)
     fb = FontBuilder(font=vf)
-    fb.setupCPAL(PALETTES)
+    fb.setupCPAL(PALETTES, paletteLabels=PALETTE_NAMES, paletteEntryLabels=PALETTE_ENTRIES)
     fb.setupCOLR(colr, version=1, clipBoxes=clips)
+    populateCOLRv0(vf["COLR"].table, {n: [(n + ".shadow", 0), (n, 1)] for n in GLYPHS}, vf.getReverseGlyphMap())
     buildStatTable(
         vf,
         [
             {"tag": "wght", "name": "Weight", "values": [
-                {"value": 300, "name": "Light"}, {"value": 400, "name": "Regular", "flags": 2},
-                {"value": 500, "name": "Medium"}, {"value": 600, "name": "SemiBold"},
-                {"value": 700, "name": "Bold"}, {"value": 800, "name": "ExtraBold"}, {"value": 900, "name": "Black"}]},
+                {"value": v, "name": n, **({"flags": 2} if v == 400 else {})} for v, n in STYLES]},
             {"tag": "slnt", "name": "Slant", "values": [
                 {"value": 0, "name": "Upright", "flags": 2}, {"value": -12, "name": "Oblique"}]},
             {"tag": "SHDW", "name": "Shadow", "values": [
-                {"value": 0, "name": "Outline", "flags": 2}, {"value": 400, "name": "Shadow"},
-                {"value": 1000, "name": "Long"}]},
+                {"value": v, "name": n, **({"flags": 2} if v == 0 else {})} for v, n in SHADOW_STYLES]},
         ],
         elidedFallbackName=2,
+        macNames=False,  # with Mac names it can't reuse fvar's Windows-only records, and duplicates them
     )
     for nid, text in [
         (0, "Copyright 2026 The Toffee Project Authors (https://github.com/lukehmu/toffee)"),
-        (13, "This Font Software is licensed under the SIL Open Font License, Version 1.1."),
+        (13, "This Font Software is licensed under the SIL Open Font License, Version 1.1. "
+             "This license is available with a FAQ at: https://openfontlicense.org"),
         (14, "https://openfontlicense.org"),
     ]:
         vf["name"].setName(text, nid, 3, 1, 0x409)

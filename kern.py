@@ -161,7 +161,7 @@ def kern_feature(faces, advances, p, g):
     vals = kern_values(faces, advances, p)
     if not vals:
         return ""
-    lines = ["feature kern {"]
+    lines = ["languagesystem DFLT dflt;", "languagesystem latn dflt;", "", "feature kern {"]
     lines += [f"    pos {left} {right} {v};" for (left, right), v in vals.items()]
     lines.append("} kern;")
     return "\n".join(lines) + "\n"
