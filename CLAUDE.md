@@ -37,6 +37,19 @@ shadow so Windows doesn't clip it. `interpolation_issues` "start point differs" 
   ball terminals). Group-private helpers are prefixed `_lc_`, `_uc_`, `_fig_`, `_pn_`, `_gf_` and `_ac_` (accents).
   Dot radii (`idot`, `pdot` in `geo()`) are written so that radius = c0 + c1·a. A radius that's linear in `a`
   interpolates exactly between the two weight masters; a scale that's linear in `a` would make it quadratic.
+- **Fillets** (`fillet()`; `_fl()` uses the house radius `_lc_rho = 10 + 0.35a`): a union of convex hulls has a
+  sharp concave corner wherever two strokes meet at an angle, and at 900 those points dominate small counters.
+  `fillet(g, st1, st2, guess, rho)` solves the circle of radius rho that touches both strokes' ink near `guess`
+  and returns a stroke swept around it, starting and ending on the two centre lines with their pens (so the
+  join stays tangent after spacing's horizontal skeleton scale). It always has `n + 2` samples, its pens shrink
+  wherever they would poke out of the strokes, and `st1`/`st2` may be lists of strokes. Use it only where the
+  same two strokes form the same corner in both masters: a corner that moves far between 300 and 900 (r's arch,
+  k's lower crotch) interpolates into a bulge at 600, so check new ones against a master built directly at 600.
+  Acute crotches take a small radius (`k=0.4`), or the fillet runs far up them.
+- **Weight-axis straightness**: a hull's sides switch from one pen to the other at directions set by the
+  stroke's slope and its pen sizes. Where those differ between the masters (a slope that changes with `a`, a
+  roundness that changes along the stroke), in-between weights bow. Long diagonals and marks keep one
+  roundness, a taper in units, and where possible one slope (caron, %).
 - **Accented letters** call their base glyph's function and append mark strokes, then register in `BASE_OF`. The
   build gives them the base's placement (the base strokes get the base's horizontal scale; marks only move) and emits
   them as TrueType composites: base + `name.mark`, and `base.shadow` + `name.mark.shadow`. A composite whose first

@@ -7,6 +7,7 @@ join round by construction. Sample counts never depend on the weight, so every
 master stays point-compatible.
 """
 
+import itertools
 import math
 
 from fontTools.agl import toUnicode
@@ -67,7 +68,7 @@ def _ink_dist(q, pts):
     Returns (distance, nearest centre-line point (x, y), radius there).
     """
     best = None
-    for (x0, y0, r0), (x1, y1, r1) in zip(pts, pts[1:]) if len(pts) > 1 else [(pts[0], pts[0])]:
+    for (x0, y0, r0), (x1, y1, r1) in itertools.pairwise(pts) if len(pts) > 1 else [(pts[0], pts[0])]:
         vx, vy, dr = x1 - x0, y1 - y0, r1 - r0
         wx, wy = q[0] - x0, q[1] - y0
         L = math.hypot(vx, vy)
@@ -365,7 +366,7 @@ def _f(g):
     yh = g.yA - rf * 0.8 - 5 - 0.38 * (g.a - 36)  # the ball's ink tops out at the ascender, like l
     stem = S(LN(0, g.yb, 0, yh), ARC(rf, yh, rf, rf * 0.8, 180, 45, 1, g.dot * 1.1, 0, 1))
     bar = LN(-g.wn * 0.22, g.yx, g.wn * 0.5, g.yx, 0.85)
-    return [stem, bar, *_lc_cross_fillets(g, stem, bar, 0, g.yx, 0.85, ((-1, -1), (-1, 1), (1, -1)))]  # hook above right
+    return [stem, bar, *_lc_cross_fillets(g, stem, bar, 0, g.yx, 0.85, ((-1, -1), (1, -1)))]  # the hook is above
 
 
 @glyph("g")
@@ -395,13 +396,13 @@ def _j(g):
 def _k(g):
     w = g.wn * 0.92 + 0.2 * g.a
     stem, arm, leg = LN(0, g.yA, 0, g.yb), LN(0, 0.3 * g.X, w, g.yx, 0.55, 1), LN(w * 0.3, 0.5 * g.X, w + 10, g.yb, 0.55, 1)
+    # No fillet in the lower crotch: it is stem/arm at 300 but stem/leg at 900, so it can't interpolate.
     return [
         stem,
         arm,
         leg,
         _fl(g, stem, arm, g.a + 20, 0.8 * g.X, 0.4),
         _fl(g, arm, leg, 0.85 * w, 0.45 * g.X, 0.4),
-        _fl(g, stem, [arm, leg], g.a + 20, 0.2 * g.X, 0.4),
     ]
 
 
@@ -447,8 +448,9 @@ def _q(g):
 def _r(g):
     rr = g.wn * 0.42
     ya = 0.4 * g.X
-    stem, arch = LN(0, g.yx, 0, g.yb), ARC(rr, ya, rr, g.X + g.ov - g.b - ya, 165, 45, 0.45, g.dot * 1.15, 0, 1)
-    return [stem, arch, _fl(g, arch, stem, g.a, 0.65 * g.X)]
+    # No fillet under the arch: at 900 that crotch runs out to the terminal, so a fillet there would move
+    # between the masters and bulge at in-between weights.
+    return [LN(0, g.yx, 0, g.yb), ARC(rr, ya, rr, g.X + g.ov - g.b - ya, 165, 45, 0.45, g.dot * 1.15, 0, 1)]
 
 
 @glyph("s")
@@ -651,7 +653,6 @@ def _K(g):
         leg,
         _fl(g, stem, arm, g.a + 20, 0.8 * g.C, 0.4),
         _fl(g, arm, leg, 0.85 * w, 0.45 * g.C, 0.4),
-        _fl(g, stem, [arm, leg], g.a + 20, 0.2 * g.C, 0.4),
     ]
 
 
@@ -967,7 +968,7 @@ def _gf_tail(g, x, y, flip=False):
 def _gf_rh(g):
     """The comma tail's height: a constant part keeps light commas and quotes as tall as the straight
     quote, and they grow less than the ball at 900."""
-    return 104 + 0.4 * g.a
+    return 150 + 0.25 * g.a
 
 
 def _gf_tail_drop(g):
@@ -1798,6 +1799,11 @@ def _chevron(g, x0, w, left):
     return S(LN(back, y + h, tip, y, 0.8, 0.85), LN(tip, y, back, y - h, 0.85, 0.8))
 
 
+def _gq_step(g, w):
+    """Offset of a guillemet's second chevron: its pens stay a shadow border apart at 900 too."""
+    return w * 0.7 + 1.9 * g.a + 30
+
+
 @glyph("guilsinglleft", 0x2039)
 def _guilsinglleft(g):
     return [_chevron(g, 0, g.wn * 0.42, True)]
@@ -1811,13 +1817,13 @@ def _guilsinglright(g):
 @glyph("guillemotleft", 0x00AB)
 def _guillemotleft(g):
     w = g.wn * 0.42
-    return [_chevron(g, 0, w, True), _chevron(g, w * 0.95 + g.a, w, True)]
+    return [_chevron(g, 0, w, True), _chevron(g, _gq_step(g, w), w, True)]
 
 
 @glyph("guillemotright", 0x00BB)
 def _guillemotright(g):
     w = g.wn * 0.42
-    return [_chevron(g, 0, w, False), _chevron(g, w * 0.95 + g.a, w, False)]
+    return [_chevron(g, 0, w, False), _chevron(g, _gq_step(g, w), w, False)]
 
 
 @glyph("exclamdown", 0x00A1)
