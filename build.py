@@ -227,7 +227,7 @@ def build_master(wght, slnt, shdw):
     order = [".notdef", "space"]
     cmap = {0x20: "space", 0xA0: "space"}
     glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
-    space_adv = round(0.3 * g.wn + 120)
+    space_adv = round(0.4 * n_adv)  # a word space scales with the weight, like n
     adv = {".notdef": 500, "space": space_adv}
     clamped = []
     placed = {}
