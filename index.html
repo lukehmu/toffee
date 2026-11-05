@@ -5,27 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Toffee</title>
 <meta name="description" content="Toffee: a heavy, rounded COLRv1 variable display font with weight, slant and long-shadow axes.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Toffee">
+<meta property="og:description" content="A heavy, rounded COLRv1 variable display font with weight, slant and long-shadow axes.">
+<meta property="og:url" content="https://lukehmu.github.io/toffee/">
+<meta property="og:image" content="https://lukehmu.github.io/toffee/docs/specimen.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="“Best year yet” set in Toffee: cream letters with a chocolate outline and long shadow on orange.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preload" href="fonts/Toffee[SHDW,slnt,wght].woff2" as="font" type="font/woff2" crossorigin>
 <style id="palette-rule"></style>
 <style>
   @font-face {
     font-family: Toffee;
     src: url("fonts/Toffee[SHDW,slnt,wght].woff2") format("woff2");
     font-weight: 300 900;
-    font-display: block;
+    font-display: swap;
   }
+  /* The presets show CPAL palettes 0-3 as built (build.py PALETTES). */
+  @font-palette-values --p0 { font-family: Toffee; base-palette: 0; }
+  @font-palette-values --p1 { font-family: Toffee; base-palette: 1; }
+  @font-palette-values --p2 { font-family: Toffee; base-palette: 2; }
+  @font-palette-values --p3 { font-family: Toffee; base-palette: 3; }
   :root {
     --wght: 900; --slnt: -10; --shdw: 600; --size: clamp(56px, 17vw, 160px); --lh: .95; --track: 0em;
-    --bg: #e2482a; --ui: #2a1316; --ui-ink: #f3ecd1; --ui-dim: #c9b9a4;
+    --bg: #e2482a; --ink: #000; --ui: #2a1316; --ui-ink: #f3ecd1; --ui-dim: #c9b9a4;
+    --toffee: Toffee, "Arial Rounded MT Bold", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
-  body { background: var(--bg); color: var(--ui); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* --ink is set by applyColours(): black or white, whichever contrasts more with --bg (always >= 4.58:1). */
+  body { background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   a { color: inherit; }
 
   .panel { position: sticky; top: 0; z-index: 2; background: var(--ui); color: var(--ui-ink);
            padding: 12px 16px; box-shadow: 0 2px 0 rgba(0,0,0,.15); }
   .panel-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
-  .brand { font-family: Toffee; font-size: 28px; font-weight: normal; margin: 0; line-height: 1.1;
+  .brand { font-family: var(--toffee); font-size: 28px; font-weight: normal; margin: 0; line-height: 1.1;
            font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 0; }
   .notice { display: none; margin: 16px 16px 0; padding: 10px 14px; border-radius: 6px; background: #fff3c4; color: #2a1316; font-size: 14px; }
   .no-colrv1 .notice { display: block; }
@@ -40,33 +59,36 @@
   input[type=color] { width: 34px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; background: none; cursor: pointer; }
   .presets { display: flex; gap: 6px; }
   .preset { width: 30px; height: 26px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); cursor: pointer; padding: 0;
-            font: 700 15px/26px Toffee; font-variation-settings: "wght" 900, "SHDW" 0; }
+            font: 700 15px/26px var(--toffee); font-variation-settings: "wght" 900, "SHDW" 0; }
   .toggles { display: flex; gap: 6px; margin-left: auto; }
   .toggles button { font: inherit; background: transparent; color: var(--ui-ink); border: 1px solid rgba(255,255,255,.3);
                     border-radius: 4px; padding: 3px 10px; cursor: pointer; }
   .toggles button[aria-pressed=true] { background: var(--ui-ink); color: var(--ui); }
+  .panel :focus-visible { outline: 2px solid var(--ui-ink); outline-offset: 2px; }
 
   .stage { padding: 48px 16px 0; min-height: 60vh; }
-  .tester { font-family: Toffee; font-size: var(--size); line-height: var(--lh); letter-spacing: var(--track);
+  .tester { font-family: var(--toffee); font-size: var(--size); line-height: var(--lh); letter-spacing: var(--track);
             font-variation-settings: "wght" var(--wght), "slnt" var(--slnt), "SHDW" var(--shdw);
             overflow-wrap: break-word; white-space: pre-wrap; text-align: var(--align, left);
             padding-bottom: calc(var(--shdw) * var(--size) / 1000 * .8 + 40px); caret-color: currentColor; }
   .tester:focus { outline: none; }
   .tester:focus-visible { outline: 2px dashed currentColor; outline-offset: 8px; }
-  .hint { font-size: 13px; opacity: .7; margin: 0 0 8px; }
+  .hint { font-size: 13px; margin: 0 0 8px; }
 
-  .css { margin: 0 16px 40px; padding: 12px 14px; background: rgba(0,0,0,.18); color: #fff; border-radius: 6px;
+  .css { margin: 0 16px 40px; padding: 12px 14px; background: var(--ui); color: var(--ui-ink); border-radius: 6px;
          font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-x: auto; }
   .css-head { display: flex; justify-content: space-between; align-items: center; margin: 0 16px 6px; font-size: 13px; }
-  .css-head button { font: inherit; background: rgba(0,0,0,.25); color: #fff; border: 0; border-radius: 4px; padding: 3px 10px; cursor: pointer; }
+  .css-head button { font: inherit; background: var(--ui); color: var(--ui-ink); border: 0; border-radius: 4px; padding: 3px 10px; cursor: pointer; }
 
-  h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin: 0 16px 8px; opacity: .75; }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin: 0 16px 4px; }
+  .grid-hint { font-size: 13px; margin: 0 16px 8px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; padding: 0 16px 48px; }
-  .grid button { font-family: Toffee; font-size: 56px; line-height: 1.25; text-align: center; padding: 6px 0 14px; border: 0;
+  .grid button { font-family: var(--toffee); font-size: 56px; line-height: 1.25; text-align: center; padding: 6px 0 14px; border: 0;
                  background: rgba(0,0,0,.08); border-radius: 6px; cursor: pointer; color: inherit;
                  font-variation-settings: "wght" var(--wght), "slnt" var(--slnt), "SHDW" min(var(--shdw), 150); }
   .grid button:hover { background: rgba(0,0,0,.16); }
-  footer { padding: 16px 16px 40px; font-size: 13px; opacity: .8; }
+  .grid button:focus-visible, .css-head button:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+  footer { padding: 16px 16px 40px; font-size: 13px; }
 
   @media (max-width: 600px) {
     .panel { position: static; }  /* sticky, it would cover a third of a phone screen */
@@ -87,18 +109,19 @@
     </nav>
   </div>
   <div class="controls">
-    <label class="ctl"><span>Weight</span><input type="range" min="300" max="900" step="1" value="900" data-var="--wght"><output>900</output></label>
-    <label class="ctl"><span>Slant</span><input type="range" min="-12" max="0" step="0.5" value="-10" data-var="--slnt"><output>-10</output></label>
-    <label class="ctl"><span>Shadow</span><input type="range" min="0" max="1000" step="1" value="600" data-var="--shdw"><output>600</output></label>
-    <label class="ctl"><span>Size</span><input type="range" min="16" max="400" step="1" value="160" data-var="--size" data-unit="px"><output>160</output></label>
-    <label class="ctl"><span>Leading</span><input type="range" min="0.7" max="1.8" step="0.01" value="0.95" data-var="--lh"><output>0.95</output></label>
-    <label class="ctl"><span>Tracking</span><input type="range" min="-0.02" max="0.3" step="0.005" value="0" data-var="--track" data-unit="em"><output>0</output></label>
+    <!-- outputs are aria-hidden: the slider already announces its value, and an <output> is a live region -->
+    <label class="ctl"><span>Weight</span><input type="range" min="300" max="900" step="1" value="900" data-var="--wght"><output aria-hidden="true">900</output></label>
+    <label class="ctl"><span>Slant</span><input type="range" min="-12" max="0" step="0.5" value="-10" data-var="--slnt"><output aria-hidden="true">-10</output></label>
+    <label class="ctl"><span>Shadow</span><input type="range" min="0" max="1000" step="1" value="600" data-var="--shdw"><output aria-hidden="true">600</output></label>
+    <label class="ctl"><span>Size</span><input type="range" min="16" max="400" step="1" value="160" data-var="--size" data-unit="px" id="size"><output aria-hidden="true">160</output></label>
+    <label class="ctl"><span>Leading</span><input type="range" min="0.7" max="1.8" step="0.01" value="0.95" data-var="--lh"><output aria-hidden="true">0.95</output></label>
+    <label class="ctl"><span>Tracking</span><input type="range" min="-0.02" max="0.3" step="0.005" value="0" data-var="--track" data-unit="em"><output aria-hidden="true">0</output></label>
   </div>
   <div class="colours">
-    <label>Face <input type="color" id="face" value="#f3ecd1"></label>
-    <label>Shadow <input type="color" id="shadow" value="#3c1c20"></label>
+    <label>Face colour <input type="color" id="face" value="#f3ecd1"></label>
+    <label>Shadow colour <input type="color" id="shadow" value="#3c1c20"></label>
     <label>Background <input type="color" id="bg" value="#e2482a"></label>
-    <div class="presets" id="presets" aria-label="Colour presets"></div>
+    <div class="presets" id="presets" role="group" aria-label="Colour presets"></div>
     <div class="toggles" role="group" aria-label="Alignment">
       <button data-align="left" aria-pressed="true">Left</button>
       <button data-align="center" aria-pressed="false">Centre</button>
@@ -107,8 +130,9 @@
   </div>
 </div>
 
-<p class="notice" role="status">This browser can't draw COLRv1 colour fonts (Safari and iOS can't yet), so you're
-  seeing Toffee's plain face without its outline and shadow. Open this page in Chrome, Edge or Firefox to see it in colour.</p>
+<p class="notice">This browser doesn't report support for COLRv1 colour fonts. If it can't draw COLRv0 colour
+  layers either, you're seeing Toffee's plain face without its outline and shadow. Chrome, Edge and Firefox draw it
+  in full colour.</p>
 
 <div class="stage">
   <p class="hint" id="hint">Click the text to type.</p>
@@ -119,26 +143,36 @@
 <div class="css-head"><span>CSS for this setting</span><button id="copy">Copy</button></div>
 <pre class="css" id="css"></pre>
 
-<h2>Glyphs</h2>
-<div class="grid" id="grid"></div>
+<h2 id="glyphs-head">Glyphs</h2>
+<p class="grid-hint" id="grid-hint">Click a glyph to insert it at the text caret. With a keyboard, Tab to the grid, move with the arrow keys and press Enter.</p>
+<div class="grid" id="grid" role="toolbar" aria-labelledby="glyphs-head" aria-describedby="grid-hint"></div>
 
 <footer>Toffee is a COLRv1 variable font with axes <code>wght</code> 300–900, <code>slnt</code> −12–0 and <code>SHDW</code> 0–1000.
   Licensed under the <a href="https://openfontlicense.org">SIL Open Font License 1.1</a>.
-  The outline and shadow need COLRv1 colour-font support: Chrome and Edge 98+ and Firefox 107+ have it, but Safari
-  and iOS don't yet, so they show the plain face.</footer>
+  The outline and shadow are colour layers: Chrome and Edge 98+ and Firefox 107+ draw them in full colour (COLRv1).
+  Safari and iOS don't support COLRv1; they draw the colours only from COLRv0 layers, and show the plain face without
+  them. Choosing a palette with <code>font-palette</code> needs Chrome or Edge 101+, Firefox 107+ or Safari 15.4+.</footer>
 
 <script>
   const root = document.documentElement;
   const tester = document.getElementById("tester");
   const css = document.getElementById("css");
   const face = document.getElementById("face"), shadow = document.getElementById("shadow"), bg = document.getElementById("bg");
+  const size = document.getElementById("size");
   const val = name => getComputedStyle(root).getPropertyValue(name).trim();
+  // Presets mirror the CPAL palettes in build.py; the background is the page's own.
   const PRESETS = [
-    { face: "#f3ecd1", shadow: "#3c1c20", bg: "#e2482a" },
-    { face: "#ffffff", shadow: "#f24521", bg: "#1f6fd1" },
-    { face: "#ffd140", shadow: "#000000", bg: "#7d3cff" },
-    { face: "#1f1f33", shadow: "#fa739e", bg: "#ffd9e4" },
+    { name: "Toffee", face: "#f3ecd1", shadow: "#3c1c20", bg: "#e2482a" },
+    { name: "Orange and white", face: "#ffffff", shadow: "#f24521", bg: "#1f6fd1" },
+    { name: "Black and yellow", face: "#ffd140", shadow: "#000000", bg: "#7d3cff" },
+    { name: "Pink and ink", face: "#1f1f33", shadow: "#fa739e", bg: "#ffd9e4" },
   ];
+
+  // WCAG relative luminance and contrast ratio
+  const lum = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+    .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
   // A fresh @font-palette-values name on each change: some engines don't repaint when a rule is edited in place.
   let paletteN = 0;
@@ -148,10 +182,18 @@
       `@font-palette-values ${name} { font-family: Toffee; base-palette: 0; override-colors: 0 ${shadow.value}, 1 ${face.value}; }`;
     document.querySelectorAll(".tester, .grid button").forEach(el => el.style.fontPalette = name);
     root.style.setProperty("--bg", bg.value);
-    // keep page text readable on light or dark backgrounds
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(bg.value.slice(i, i + 2), 16));
-    document.body.style.color = (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#2a1316" : "#ffffff";
+    // page text: black or white, whichever reads better on the background (the worst case is 4.58:1)
+    root.style.setProperty("--ink", contrast("#000000", bg.value) >= contrast("#ffffff", bg.value) ? "#000" : "#fff");
     updateCss();
+  }
+
+  // Until the Size slider is moved, the size is the responsive clamp() in :root: show what it computes to.
+  let sizeSet = false;
+  function syncSize() {
+    if (sizeSet) return;
+    const px = Math.round(parseFloat(getComputedStyle(tester).fontSize));
+    size.value = px;
+    size.nextElementSibling.value = px;
   }
 
   function updateCss() {
@@ -160,13 +202,19 @@
   font-family: Toffee;
   src: url("Toffee[SHDW,slnt,wght].woff2") format("woff2");
   font-weight: 300 900;
+  font-display: swap;
 }
 @font-palette-values --my-toffee {
   font-family: Toffee;
+  base-palette: 0;
   override-colors: 0 ${shadow.value}, 1 ${face.value};
 }
 h1 {
-  font-family: Toffee;
+  font-family: Toffee, "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-size: ${val("--size")};
+  line-height: ${val("--lh")};
+  letter-spacing: ${val("--track")};
+  text-align: ${val("--align") || "left"};
   font-variation-settings: "wght" ${val("--wght")}, "slnt" ${val("--slnt")}, "SHDW" ${val("--shdw")};
   font-palette: --my-toffee;
 }`;
@@ -174,21 +222,24 @@ h1 {
 
   for (const input of document.querySelectorAll("input[data-var]")) {
     input.addEventListener("input", () => {
+      if (input === size) sizeSet = true;
       root.style.setProperty(input.dataset.var, input.value + (input.dataset.unit || ""));
       input.nextElementSibling.value = input.value;
       updateCss();
     });
   }
   [face, shadow, bg].forEach(el => el.addEventListener("input", applyColours));
+  addEventListener("resize", syncSize);
 
   const presets = document.getElementById("presets");
   PRESETS.forEach((p, i) => {
     const b = document.createElement("button");
     b.className = "preset";
-    b.title = b.ariaLabel = `Colour preset ${i + 1}`;
+    b.title = b.ariaLabel = `${p.name} preset`;
     b.textContent = "a";
     b.style.background = p.bg;
     b.style.color = p.face;
+    b.style.fontPalette = `--p${i}`;
     b.addEventListener("click", () => { face.value = p.face; shadow.value = p.shadow; bg.value = p.bg; applyColours(); });
     presets.append(b);
   });
@@ -196,6 +247,7 @@ h1 {
   document.querySelectorAll("[data-align]").forEach(btn => btn.addEventListener("click", () => {
     document.querySelectorAll("[data-align]").forEach(b => b.setAttribute("aria-pressed", b === btn));
     root.style.setProperty("--align", btn.dataset.align);
+    updateCss();
   }));
 
   document.getElementById("copy").addEventListener("click", async e => {
@@ -203,6 +255,35 @@ h1 {
     catch { e.target.textContent = "Select and copy"; }
     setTimeout(() => e.target.textContent = "Copy", 1500);
   });
+
+  // Plain-text editing, so pasted text doesn't bring its styling. Browsers without plaintext-only get a paste handler.
+  try { tester.contentEditable = "plaintext-only"; } catch {}
+  if (tester.contentEditable !== "plaintext-only") {
+    tester.contentEditable = "true";
+    tester.addEventListener("paste", e => {
+      e.preventDefault();
+      document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+    });
+  }
+
+  // The last caret position in the tester, so a glyph button inserts there rather than at the end.
+  let caret = null;
+  document.addEventListener("selectionchange", () => {
+    const s = getSelection();
+    if (s.rangeCount && tester.contains(s.anchorNode)) caret = s.getRangeAt(0).cloneRange();
+  });
+  function insertAtCaret(text) {
+    if (!caret || !tester.contains(caret.startContainer)) {
+      caret = document.createRange();
+      caret.selectNodeContents(tester);
+      caret.collapse(false);
+    }
+    caret.deleteContents();
+    const node = document.createTextNode(text);
+    caret.insertNode(node);
+    caret.setStartAfter(node);
+    caret.collapse(true);
+  }
 
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.,:;'\"()[]{}/\\|-–—+−×÷=<>*#%$£€&@…“”‘’«»‹›¡¿•·_~^" +
     "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ" +
@@ -212,16 +293,36 @@ h1 {
     const b = document.createElement("button");
     b.textContent = c;
     b.title = `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4, "0")}: insert`;
-    b.addEventListener("click", () => { tester.textContent += c; });
+    b.tabIndex = grid.children.length ? -1 : 0;
+    b.addEventListener("click", () => { insertAtCaret(c); rove(b); });
     grid.append(b);
   }
+  // One tab stop for the whole grid (roving tabindex); arrow keys, Home and End move within it.
+  function rove(to) {
+    grid.querySelector("[tabindex='0']").tabIndex = -1;
+    to.tabIndex = 0;
+    to.focus();
+  }
+  grid.addEventListener("keydown", e => {
+    const btns = [...grid.children], i = btns.indexOf(document.activeElement);
+    if (i < 0) return;
+    let cols = btns.findIndex(b => b.offsetTop !== btns[0].offsetTop);
+    if (cols < 0) cols = btns.length;
+    const j = { ArrowLeft: i - 1, ArrowRight: i + 1, ArrowUp: i - cols, ArrowDown: i + cols,
+                Home: 0, End: btns.length - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault();
+    if (btns[j]) rove(btns[j]);
+  });
 
-  // COLRv1 support: browsers without CSS font-tech() or without COLRv1 get a notice (Safari has neither).
+  // No COLRv1, or no CSS font-tech() to say so (Chrome/Edge before 108, Firefox before 106): show the notice.
   try {
     if (!CSS.supports("font-tech(color-COLRv1)")) root.classList.add("no-colrv1");
   } catch { root.classList.add("no-colrv1"); }
 
   applyColours();
+  syncSize();
+  updateCss();
 </script>
 </body>
 </html>
