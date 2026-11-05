@@ -4,16 +4,24 @@ A heavy, rounded display face built as a COLRv1 variable font. The style is take
 
 **Demo:** https://lukehmu.github.io/toffee/ lets you type in it and set every axis and colour.
 
+![“Best year yet” set in Toffee: cream letters with a chocolate outline and long shadow on orange](docs/specimen.png)
+
+**Download:** [Toffee[SHDW,slnt,wght].woff2](https://github.com/lukehmu/toffee/raw/main/fonts/Toffee%5BSHDW,slnt,wght%5D.woff2)
+for the web, [Toffee[SHDW,slnt,wght].ttf](https://github.com/lukehmu/toffee/raw/main/fonts/Toffee%5BSHDW,slnt,wght%5D.ttf)
+for desktop apps.
+
 Axes:
 - `wght` 300–900
 - `slnt` −12–0
 - `SHDW` 0–1000: long-shadow length; 0 = outline only
 
-CPAL palettes: 0 toffee (chocolate shadow, cream face), 1 orange/white, 2 black/yellow, 3 pink/ink.
+CPAL palettes (index 0 = shadow and outline, 1 = face): 0 toffee, 1 orange/white, 2 black/yellow, 3 pink/ink.
 
-**Browser support.** The outline and shadow are COLRv1 colour layers. Chrome and Edge 98+ and Firefox 107+ draw
-them. Safari and iOS don't support COLRv1 yet, so there, like any other non-COLR renderer, you get the plain
-monochrome face. To feature-detect: `CSS.supports("font-tech(color-COLRv1)")`.
+**Browser support.** The outline and shadow are colour layers. Chrome and Edge 98+ and Firefox 107+ draw them in
+full colour (COLRv1). Safari and iOS don't support COLRv1: they draw the colours only from COLRv0 layers, and show the
+plain monochrome face without them, as any non-colour renderer does. Choosing a palette (`font-palette`,
+`@font-palette-values`) needs Chrome or Edge 101+, Firefox 107+ or Safari 15.4+. To feature-detect COLRv1:
+`CSS.supports("font-tech(color-COLRv1)")` (Chrome 108+, Firefox 106+, Safari 17+; older browsers answer false).
 
 **Character set.** 235 characters: Basic Latin, all Latin-1 letters (À–ÿ), Œ œ Š š Ž ž Ÿ ı, and the Central
 European letters Ą Ć Č Ď Đ Ę Ě Ľ Ł Ń Ň Ő Ŕ Ř Ś Ť Ů Ű Ź Ż, with their lowercase. Also curly quotes, « » ‹ ›, ¡ ¿,
@@ -22,9 +30,30 @@ dashes, ellipsis, × ÷ − £ €. Kerning is generated from the outlines at ev
 In CSS:
 
 ```css
-@font-face { font-family: Toffee; src: url("Toffee[SHDW,slnt,wght].woff2") format("woff2"); font-weight: 300 900; }
-@font-palette-values --mine { font-family: Toffee; override-colors: 0 #3c1c20, 1 #f3ecd1; } /* 0 shadow, 1 face */
-h1 { font-family: Toffee; font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 600; font-palette: --mine; }
+@font-face {
+  font-family: Toffee;
+  src: url("Toffee[SHDW,slnt,wght].woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
+h1 {
+  /* fallbacks: a rounded heavy face where there is one, else the system UI font */
+  font-family: Toffee, "Arial Rounded MT Bold", system-ui, sans-serif;
+  font-variation-settings: "wght" 900, "slnt" -10, "SHDW" 600;
+  line-height: 1;
+}
+```
+
+Palettes: pick one of the four built in with `base-palette`, or override its two colours (0 = shadow and outline,
+1 = face):
+
+```css
+@font-palette-values --toffee { font-family: Toffee; base-palette: 0; } /* #3c1c20 shadow, #f3ecd1 face */
+@font-palette-values --orange { font-family: Toffee; base-palette: 1; } /* #f24521 shadow, #ffffff face */
+@font-palette-values --yellow { font-family: Toffee; base-palette: 2; } /* #000000 shadow, #ffd140 face */
+@font-palette-values --pink   { font-family: Toffee; base-palette: 3; } /* #fa739e shadow, #1f1f33 face */
+@font-palette-values --mine   { font-family: Toffee; base-palette: 0; override-colors: 0 #0b3d2e, 1 #f6e27a; }
+h1 { font-palette: --orange; }
 ```
 
 Tips:
