@@ -21,6 +21,28 @@ Baloo 2 and Grandstander). The full research report is kept below.
 
 Not applied: wn 360 (the photo's narrower 900; a judgment call), and kerning.
 
+## Applied (2026-11-05): joins and counters at 900
+
+- **Soft joins**: every concave corner where strokes meet is filleted (`fillet()` in `glyphs.py`, radius
+  `10 + 0.35a`; smaller in acute crotches and in e's eye). a d g q b p þ, e (eye, aperture and the beak under
+  the bar), n h m, u y (counter and crotch), t f, k K, the caps' stem/bar/bowl corners, A M N V W X Y Z v w x
+  z, G's bar, and 1 2 4 5 6 7 8 9. bowl_left ends at 320° and bowl_right at ±145°, so a/b/d/p close at 300.
+- **Counters at 900**: e's bar thins to 0.55 and drops 11 units; s's terminals are shorter with smaller
+  balls; B's waist is lower (0.52C) and thin; the figures' bowls use a pen scale of 0.88 at 900 (their width
+  is fixed by the class, so a wider skeleton would just be scaled back), 0's class is 1.00 (heavy references
+  1.00), 8's waist drops, 4 has a thinner diagonal and bar, 5's bowl starts inside its stem; % rings, @'s
+  inner a and the Æ's A half grow with the pen; @ is taller.
+- **Marks**: the double acute's strokes stay `border + 10` apart; the ogonek ends 25 above the descender;
+  ď ť ľ Ľ's comma sits `border + 10` off the stem; cap marks end under 912 (ascender 930), with circumflex
+  and caron as tall as the acute; f's ball and the asterisk stop at the ascender and cap height.
+- **Space** is `0.4 × n advance` (241 at 300, 265 at 900; it was a fixed 232).
+- **Comma and curly quotes**: the tail height is `150 + 0.25a` (it was `1.9r`), so the light ’ is nearly as
+  tall as the straight quote and the 900 one is no longer twice the 300 one.
+- **Weight axis**: caron, circumflex, acute and % keep one roundness and (for caron and %) one slope at
+  both masters, so the hull's sides switch pens in the same directions and 600 stays straight (caron 9.2%
+  → 2.0% off a directly built 600 master, % 7.6% → 1.5%). The acute keeps its old slope (a constant one
+  turned it into a dot at 900 caps), so it is still 6.5% off. & is unchanged (6.0%).
+
 ---
 
 # Toffee against comparable open fonts

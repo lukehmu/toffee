@@ -7,6 +7,7 @@ join round by construction. Sample counts never depend on the weight, so every
 master stays point-compatible.
 """
 
+import itertools
 import math
 
 from fontTools.agl import toUnicode
@@ -59,6 +60,127 @@ def at(cx, cy, rx, ry, ang):
     return cx + rx * math.cos(t), cy + ry * math.sin(t)
 
 
+def _ink_dist(q, pts):
+    """Distance from q to a stroke's ink, in pen space (y scaled by a/b so the pen is a circle).
+
+    pts: [(x, y, radius)]. Each consecutive pair's ink is the hull of two circles, i.e. the union of circles
+    whose centre and radius go linearly along the pair, so the distance is min over t of |q - c(t)| - r(t).
+    Returns (distance, nearest centre-line point (x, y), radius there).
+    """
+    best = None
+    for (x0, y0, r0), (x1, y1, r1) in itertools.pairwise(pts) if len(pts) > 1 else [(pts[0], pts[0])]:
+        vx, vy, dr = x1 - x0, y1 - y0, r1 - r0
+        wx, wy = q[0] - x0, q[1] - y0
+        L = math.hypot(vx, vy)
+        ts = [0.0, 1.0]
+        if L > 1e-9 and abs(dr) < L:
+            along, perp = (wx * vx + wy * vy) / L, abs(wx * vy - wy * vx) / L
+            k = -dr / L
+            ts.append(min(1.0, max(0.0, (along - k * perp / math.sqrt(1 - k * k)) / L)))
+        for t in ts:
+            cx, cy = x0 + t * vx, y0 + t * vy
+            d = math.hypot(q[0] - cx, q[1] - cy) - (r0 + t * dr)
+            if best is None or d < best[0]:
+                best = (d, (cx, cy), r0 + t * dr)
+    return best
+
+
+_FILLETS: dict = {}
+
+
+def fillet(g, st1, st2, guess, rho, n=7):
+    """A stroke that rounds the concave corner where the ink of st1 meets the ink of st2.
+
+    Strokes joined at an angle leave a sharp notch where their edges cross (a convex-hull union has no
+    fillets of its own). This finds the circle of radius rho, near `guess`, that touches both inks, and
+    sweeps the pen around it: the stroke's inner edge is that circle, and it starts and ends on the two
+    centre lines with their pens, so it merges into both strokes tangentially. It has n + 2 samples at
+    every weight (the angles are solved, not passed to ARC, so the count can't change), and
+    because both ends sit on the strokes' centre lines, spacing's horizontal skeleton scale keeps the
+    joins tangent. Works in pen space (y * a/b), where the pen is a circle.
+    """
+    st1, st2 = ([st] if st and isinstance(st[0], tuple) else st for st in (st1, st2))
+    key = (tuple(map(tuple, st1)), tuple(map(tuple, st2)), guess, rho, n, g.a, g.b)
+    if key in _FILLETS:
+        return _FILLETS[key]
+    q = g.a / g.b
+
+    def _dist(pt, group):
+        return min((_ink_dist(pt, st) for st in group), key=lambda r: r[0])
+
+    inks = [[[(x, y * q, s * g.a) for x, y, s, _ in st] for st in sts] for sts in (st1, st2)]
+    ox, oy = guess[0], guess[1] * q
+    for _ in range(60):
+        (d1, p1, _), (d2, p2, _) = (_dist((ox, oy), ink) for ink in inks)
+        n1 = ((ox - p1[0]), (oy - p1[1]))
+        n2 = ((ox - p2[0]), (oy - p2[1]))
+        l1, l2 = math.hypot(*n1), math.hypot(*n2)
+        n1, n2 = (n1[0] / l1, n1[1] / l1), (n2[0] / l2, n2[1] / l2)
+        f1, f2 = d1 - rho, d2 - rho
+        det = n1[0] * n2[1] - n1[1] * n2[0]
+        if abs(f1) + abs(f2) < 1e-6:
+            break
+        dx = (f1 * n2[1] - f2 * n1[1]) / det
+        dy = (n1[0] * f2 - n2[0] * f1) / det
+        step = math.hypot(dx, dy)
+        if step > 25:
+            dx, dy = dx * 25 / step, dy * 25 / step
+        ox, oy = ox - dx, oy - dy
+    else:
+        raise ValueError(f"fillet near {guess} did not converge (a={g.a})")
+    (_, p1, r1), (_, p2, r2) = (_dist((ox, oy), ink) for ink in inks)
+    f1 = math.atan2(p1[1] - oy, p1[0] - ox)
+    f2 = math.atan2(p2[1] - oy, p2[0] - ox)
+    sweep = (f2 - f1 + math.pi) % (2 * math.pi) - math.pi
+    # How far the corner is: march out along the bisector until the point is inside either ink.
+    fm = f1 + sweep / 2
+
+    def inside(d):
+        pt = (ox + d * math.cos(fm), oy + d * math.sin(fm))
+        return min(_dist(pt, ink)[0] for ink in inks) <= 0
+
+    hi = rho
+    while not inside(hi):
+        hi += 4
+        if hi > 1000:
+            raise ValueError(f"fillet near {guess}: no corner along the bisector (a={g.a})")
+    lo = hi - 4
+    for _ in range(20):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if inside(mid) else (mid, hi)
+    fs = [f1 + sweep * i / (n - 1) for i in range(n)]
+    rs = [r1 + (r2 - r1) * t * t * (3 - 2 * t) for t in (i / (n - 1) for i in range(n))]
+
+    def outside(cx, cy, r, f):  # does the pen's outer half leave the strokes' ink?
+        for da in (-1.3, -0.8, -0.35, 0, 0.35, 0.8, 1.3):
+            pt = (cx + r * math.cos(f + da), cy + r * math.sin(f + da))
+            if min(_dist(pt, k)[0] for k in inks) > 0.75:
+                return True
+        return False
+
+    # Keep the pen's outer side inside the strokes (a thin neck, a tapered end): shrink the inner samples
+    # wherever the hull of two consecutive samples pokes out. The ends stay: they are the strokes' own pens.
+    for _ in range(40):
+        bad = set()
+        for i in range(n - 1):
+            for t in (0.25, 0.5, 0.75, 1.0):
+                f = fs[i] + (fs[i + 1] - fs[i]) * t
+                r = rs[i] + (rs[i + 1] - rs[i]) * t
+                if outside(ox + (rho + r) * math.cos(f), oy + (rho + r) * math.sin(f), r, f):
+                    bad.update({i, i + 1} - {0, n - 1})
+        if not bad:
+            break
+        for i in bad:
+            rs[i] *= 0.92
+    out = [(ox + (rho + r) * math.cos(f), (oy + (rho + r) * math.sin(f)) / q, r / g.a, 0) for f, r in zip(fs, rs)]
+    # A spike from the middle sample out to the corner and back fills the sliver an acute corner leaves
+    # beyond the pen's reach (inside the pen already when the corner is near).
+    tip = (ox + (hi + 2) * math.cos(fm), (oy + (hi + 2) * math.sin(fm)) / q, 2 / g.a, 0)
+    out[n // 2 + 1 : n // 2 + 1] = [tip, out[n // 2]]
+    _FILLETS[key] = out
+    return out
+
+
 def geo(p):
     a, b = p.a, p.b
     X, C, A, D, ov, ovC = 570, 730, 780, -230, 10, 14
@@ -101,12 +223,12 @@ def _lc_rx(g):
 
 
 def bowl_right(g, x0, rx, cy, ry, sj=0.45):
-    """Bowl attached to a stem on its left (b, p): full pen, tapering into the stem."""
+    """Bowl attached to a stem on its left (b, p): full pen, tapering into the stem (reaching it at 300)."""
     cx = x0 + rx
     return S(
-        ARC(cx, cy, rx, ry, 125, 95, sj, 1),
+        ARC(cx, cy, rx, ry, 145, 95, sj, 1),
         ARC(cx, cy, rx, ry, 95, -95)[1:],
-        ARC(cx, cy, rx, ry, -95, -125, 1, sj)[1:],
+        ARC(cx, cy, rx, ry, -95, -145, 1, sj)[1:],
     )
 
 
@@ -120,8 +242,42 @@ def bowl_left(g, xs, rx, cy, ry, sj=0.45):
     return S(
         LN(xs - 0.5 * g.a, cy + ry + (1 - sj) * g.b, *at(cx, cy, rx, ry, 85), sj, 1),
         ARC(cx, cy, rx, ry, 85, 275)[1:],
-        ARC(cx, cy, rx, ry, 275, 305, 1, sj)[1:],
+        ARC(cx, cy, rx, ry, 275, 320, 1, sj)[1:],
     )
+
+
+def _lc_rho(g):
+    """Counter fillet radius: the inner corners where strokes join round off like the pen's own ends."""
+    return 10 + 0.35 * g.a
+
+
+def _fl(g, st1, st2, x, y, k=1.0):
+    """fillet() with the house radius (times k), guessed near (x, y)."""
+    return fillet(g, st1, st2, (x, y), k * _lc_rho(g))
+
+
+def _lc_ebar(g):
+    """e's crossbar pen scale: 0.65 at 300, 0.55 at 900, so the eye and aperture stay open."""
+    return 0.65 - 0.1 * (g.a - 36) / 76
+
+
+def _lc_bowl_fillets(g, bowl, stem, xs, side=-1):
+    """Fillets for a bowl meeting its stem at xs, both counter corners: bowl_left (a, d, g, q) or, with
+    side=1, bowl_right (b, p)."""
+    rho = _lc_rho(g)
+    x = xs + side * (g.a + rho)
+    return [fillet(g, bowl, stem, (x, g.cy + 0.55 * g.ry), rho), fillet(g, bowl, stem, (x, g.cy - 0.55 * g.ry), rho)]
+
+
+def _lc_cup_fillets(g, cup, stem, xs):
+    """u_cup meeting its right stem at xs (u, y): the counter's corner and the crotch under the cup."""
+    return [_fl(g, cup, stem, xs - g.a, 0.45 * g.X), _fl(g, cup, stem, xs - g.a, -0.1 * g.X, 0.7)]
+
+
+def _lc_cross_fillets(g, stem, bar, x, y, sb, corners=((-1, -1), (-1, 1), (1, -1), (1, 1))):
+    """The corners where a crossbar (pen scale sb, at height y) crosses a stem at x (t, f)."""
+    h = sb * g.b
+    return [_fl(g, stem, bar, x + sx * (g.a + 20), y + sy * (h + 20), 0.5) for sx, sy in corners]
 
 
 def hook_left(g, xs, ytop, rh, yh=-10):
@@ -135,7 +291,7 @@ def tail_right(g, xs, ytop, rt, s0=1):
     return S(LN(xs, ytop, xs, yt, s0, 1), ARC(xs + rt, yt, rt, rt * 0.8, 180, 300, 1, 0.85, 0, 0.6))
 
 
-def s_shape(g, cx, rx, top, bot, k=1.0):
+def s_shape(g, cx, rx, top, bot, k=1.0, a0=30, a1=-150):
     h = top - bot
     r4 = h / 4
     yl = bot + r4
@@ -144,9 +300,9 @@ def s_shape(g, cx, rx, top, bot, k=1.0):
     x1, y1 = at(cx, yl, rx, r4, 65)
     return [
         S(
-            ARC(cx, yu, rx * 0.95, r4, 30, 245, g.dot * 1.05 * k, 1, 0.8, 0),
+            ARC(cx, yu, rx * 0.95, r4, a0, 245, g.dot * 1.05 * k, 1, 0.8, 0),
             LN(x0, y0, x1, y1),
-            ARC(cx, yl, rx, r4, 65, -150, 1, g.dot * 1.05 * k, 0, 0.8),
+            ARC(cx, yl, rx, r4, 65, a1, 1, g.dot * 1.05 * k, 0, 0.8),
         )
     ]
 
@@ -157,13 +313,15 @@ def s_shape(g, cx, rx, top, bot, k=1.0):
 @glyph("a")
 def _a(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yx, g.wn * 0.2)]
+    bowl, stem = bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yx, g.wn * 0.2)
+    return [bowl, stem, *_lc_bowl_fillets(g, bowl, stem, 2 * rx)]
 
 
 @glyph("b")
 def _b(g):
     rx = _lc_rx(g)
-    return [LN(0, g.yA, 0, g.yb), bowl_right(g, 0, rx, g.cy, g.ry)]
+    stem, bowl = LN(0, g.yA, 0, g.yb), bowl_right(g, 0, rx, g.cy, g.ry)
+    return [stem, bowl, *_lc_bowl_fillets(g, bowl, stem, 0, 1)]
 
 
 @glyph("c")
@@ -180,38 +338,48 @@ def _c(g):
 @glyph("d")
 def _d(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yA, g.wn * 0.2)]
+    bowl, stem = bowl_left(g, 2 * rx, rx, g.cy, g.ry), tail_right(g, 2 * rx, g.yA, g.wn * 0.2)
+    return [bowl, stem, *_lc_bowl_fillets(g, bowl, stem, 2 * rx)]
 
 
 @glyph("e")
 def _e(g):
     rx = _lc_rx(g) + 5
-    ybar = g.cy + 0.03 * g.X
+    ybar = g.cy + 0.03 * g.X - 0.15 * (g.a - 36)  # a little lower at 900, where the eye is the smaller
+    sb = _lc_ebar(g)
+    bar = LN(0, ybar, 2 * rx, ybar, sb)
+    bowl = S(ARC(rx, g.cy, rx, g.ry, 5, 200), ARC(rx, g.cy, rx, g.ry, 200, 315, 1, g.dot, 0, 0.8)[1:])
+    rho, h = _lc_rho(g), sb * g.b
     return [
-        LN(0, ybar, 2 * rx, ybar, 0.65),
-        S(ARC(rx, g.cy, rx, g.ry, 5, 200), ARC(rx, g.cy, rx, g.ry, 200, 315, 1, g.dot, 0, 0.8)[1:]),
+        bar,
+        bowl,
+        fillet(g, bar, bowl, (2 * rx - g.a - rho, ybar + h + rho), 0.7 * rho),  # eye (small: keep its area)
+        fillet(g, bar, bowl, (g.a + rho, ybar + h + rho), 0.7 * rho),
+        fillet(g, bar, bowl, (g.a + rho, ybar - h - rho), rho),  # aperture
+        fillet(g, bar, bowl[:3], (2 * rx - g.a - 0.5 * rho, ybar - h - rho), rho),  # under the bowl's start
     ]
 
 
 @glyph("f")
 def _f(g):
     rf = g.wn * 0.36
-    yh = g.yA - rf * 0.8
-    return [
-        S(LN(0, g.yb, 0, yh), ARC(rf, yh, rf, rf * 0.8, 180, 45, 1, g.dot * 1.1, 0, 1)),
-        LN(-g.wn * 0.22, g.yx, g.wn * 0.5, g.yx, 0.85),
-    ]
+    yh = g.yA - rf * 0.8 - 5 - 0.38 * (g.a - 36)  # the ball's ink tops out at the ascender, like l
+    stem = S(LN(0, g.yb, 0, yh), ARC(rf, yh, rf, rf * 0.8, 180, 45, 1, g.dot * 1.1, 0, 1))
+    bar = LN(-g.wn * 0.22, g.yx, g.wn * 0.5, g.yx, 0.85)
+    return [stem, bar, *_lc_cross_fillets(g, stem, bar, 0, g.yx, 0.85, ((-1, -1), (1, -1)))]  # the hook is above
 
 
 @glyph("g")
 def _g(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), hook_left(g, 2 * rx, g.yx, rx * 0.95)]
+    bowl, stem = bowl_left(g, 2 * rx, rx, g.cy, g.ry), hook_left(g, 2 * rx, g.yx, rx * 0.95)
+    return [bowl, stem, *_lc_bowl_fillets(g, bowl, stem, 2 * rx)]
 
 
 @glyph("h")
 def _h(g):
-    return [LN(0, g.yA, 0, g.yb), n_arch(g, 0, _lc_nw(g))]
+    stem, arch = LN(0, g.yA, 0, g.yb), n_arch(g, 0, _lc_nw(g))
+    return [stem, arch, _fl(g, arch, stem, g.a, 0.7 * g.X)]
 
 
 @glyph("i")
@@ -227,10 +395,14 @@ def _j(g):
 @glyph("k")
 def _k(g):
     w = g.wn * 0.92 + 0.2 * g.a
+    stem, arm, leg = LN(0, g.yA, 0, g.yb), LN(0, 0.3 * g.X, w, g.yx, 0.55, 1), LN(w * 0.3, 0.5 * g.X, w + 10, g.yb, 0.55, 1)
+    # No fillet in the lower crotch: it is stem/arm at 300 but stem/leg at 900, so it can't interpolate.
     return [
-        LN(0, g.yA, 0, g.yb),
-        LN(0, 0.3 * g.X, w, g.yx, 0.55, 1),
-        LN(w * 0.3, 0.5 * g.X, w + 10, g.yb, 0.55, 1),
+        stem,
+        arm,
+        leg,
+        _fl(g, stem, arm, g.a + 20, 0.8 * g.X, 0.4),
+        _fl(g, arm, leg, 0.85 * w, 0.45 * g.X, 0.4),
     ]
 
 
@@ -242,12 +414,14 @@ def _l(g):
 @glyph("m")
 def _m(g):
     w = g.wn * 0.72 + 0.9 * g.a
-    return [LN(0, g.yx, 0, g.yb), n_arch(g, 0, w), n_arch(g, w, w)]
+    stem, a1, a2 = LN(0, g.yx, 0, g.yb), n_arch(g, 0, w), n_arch(g, w, w)
+    return [stem, a1, a2, _fl(g, a1, stem, g.a, 0.7 * g.X), _fl(g, a2, a1, w + g.a, 0.7 * g.X)]
 
 
 @glyph("n")
 def _n(g):
-    return [LN(0, g.yx, 0, g.yb), n_arch(g, 0, _lc_nw(g))]
+    stem, arch = LN(0, g.yx, 0, g.yb), n_arch(g, 0, _lc_nw(g))
+    return [stem, arch, _fl(g, arch, stem, g.a, 0.7 * g.X)]
 
 
 @glyph("o")
@@ -259,103 +433,141 @@ def _o(g):
 @glyph("p")
 def _p(g):
     rx = _lc_rx(g)
-    return [LN(0, g.yx, 0, g.yD), bowl_right(g, 0, rx, g.cy, g.ry)]
+    stem, bowl = LN(0, g.yx, 0, g.yD), bowl_right(g, 0, rx, g.cy, g.ry)
+    return [stem, bowl, *_lc_bowl_fillets(g, bowl, stem, 0, 1)]
 
 
 @glyph("q")
 def _q(g):
     rx = _lc_rx(g)
-    return [bowl_left(g, 2 * rx, rx, g.cy, g.ry), LN(2 * rx, g.yx, 2 * rx, g.yD)]
+    bowl, stem = bowl_left(g, 2 * rx, rx, g.cy, g.ry), LN(2 * rx, g.yx, 2 * rx, g.yD)
+    return [bowl, stem, *_lc_bowl_fillets(g, bowl, stem, 2 * rx)]
 
 
 @glyph("r")
 def _r(g):
     rr = g.wn * 0.42
     ya = 0.4 * g.X
-    return [
-        LN(0, g.yx, 0, g.yb),
-        ARC(rr, ya, rr, g.X + g.ov - g.b - ya, 165, 45, 0.45, g.dot * 1.15, 0, 1),
-    ]
+    # No fillet under the arch: at 900 that crotch runs out to the terminal, so a fillet there would move
+    # between the masters and bulge at in-between weights.
+    return [LN(0, g.yx, 0, g.yb), ARC(rr, ya, rr, g.X + g.ov - g.b - ya, 165, 45, 0.45, g.dot * 1.15, 0, 1)]
 
 
 @glyph("s")
 def _s(g):
-    return s_shape(g, g.wn * 0.42, g.wn * 0.42, g.X + g.ov - g.b, g.b - g.ov)
+    # Shorter terminals with smaller balls at 900, so the apertures don't close.
+    k = 1 - 0.2 * (g.a - 36) / 76
+    return s_shape(g, g.wn * 0.42, g.wn * 0.42, g.X + g.ov - g.b, g.b - g.ov, k, 38, -142)
 
 
 @glyph("t")
 def _t(g):
-    return [tail_right(g, 0, g.X + 130 - g.b, g.wn * 0.3), LN(-g.wn * 0.25, g.yx, g.wn * 0.5, g.yx, 0.85)]
+    stem, bar = tail_right(g, 0, g.X + 130 - g.b, g.wn * 0.3), LN(-g.wn * 0.25, g.yx, g.wn * 0.5, g.yx, 0.85)
+    return [stem, bar, *_lc_cross_fillets(g, stem, bar, 0, g.yx, 0.85)]
 
 
 @glyph("u")
 def _u(g):
     w = _lc_nw(g)
-    return [u_cup(g, 0, w), tail_right(g, w, g.yx, g.wn * 0.2)]
+    cup, stem = u_cup(g, 0, w), tail_right(g, w, g.yx, g.wn * 0.2)
+    return [cup, stem, *_lc_cup_fillets(g, cup, stem, w)]
 
 
 @glyph("v")
 def _v(g):
     w = g.wn * 1.05 + 0.3 * g.a
-    return [S(LN(0, g.yx, w / 2, g.yb, 1, 0.85), LN(w / 2, g.yb, w, g.yx, 0.85, 1))]
+    left, right = LN(0, g.yx, w / 2, g.yb, 1, 0.85), LN(w / 2, g.yb, w, g.yx, 0.85, 1)
+    return [S(left, right), _fl(g, left, right, w / 2, 0.45 * g.X, 0.4)]
 
 
 @glyph("w")
 def _w(g):
     w = g.wn * 1.6 + 0.5 * g.a
-    return [
-        S(
-            LN(0, g.yx, w * 0.25, g.yb, 1, 0.8),
-            LN(w * 0.25, g.yb, w * 0.5, g.yx * 0.8, 0.8, 0.8),
-            LN(w * 0.5, g.yx * 0.8, w * 0.75, g.yb, 0.8, 0.8),
-            LN(w * 0.75, g.yb, w, g.yx, 0.8, 1),
-        )
+    ls = [
+        LN(0, g.yx, w * 0.25, g.yb, 1, 0.8),
+        LN(w * 0.25, g.yb, w * 0.5, g.yx * 0.8, 0.8, 0.8),
+        LN(w * 0.5, g.yx * 0.8, w * 0.75, g.yb, 0.8, 0.8),
+        LN(w * 0.75, g.yb, w, g.yx, 0.8, 1),
     ]
+    return [S(*ls), *_vee_fillets(g, ls, w, g.X)]
 
 
 @glyph("x")
 def _x(g):
     w = g.wn * 0.98 + 0.3 * g.a
-    return [LN(0, g.yx, w, g.yb), LN(0, g.yb, w, g.yx, 0.8)]
+    l1, l2 = LN(0, g.yx, w, g.yb), LN(0, g.yb, w, g.yx, 0.8)
+    return [l1, l2, *_cross_fillets(g, l1, l2, w, g.X / 2, g.X)]
 
 
 @glyph("y")
 def _y(g):
     w = _lc_nw(g)
-    return [u_cup(g, 0, w), hook_left(g, w, g.yx, g.wn * 0.5)]
+    cup, stem = u_cup(g, 0, w), hook_left(g, w, g.yx, g.wn * 0.5)
+    return [cup, stem, *_lc_cup_fillets(g, cup, stem, w)]
 
 
 @glyph("z")
 def _z(g):
     w = g.wn * 0.88 + 0.3 * g.a
-    return [S(LN(0, g.yx, w, g.yx), LN(w, g.yx, 0, g.yb, 1, 1.05), LN(0, g.yb, w, g.yb))]
+    return _z_shape(g, w, g.yx, g.X)
+
+
+def _z_shape(g, w, yt, h):
+    """z/Z, with its two acute inner corners rounded."""
+    top, diag, bot = LN(0, yt, w, yt), LN(w, yt, 0, g.yb, 1, 1.05), LN(0, g.yb, w, g.yb)
+    return [S(top, diag, bot), _fl(g, top, diag, 0.45 * w, yt - g.b - 30, 0.4), _fl(g, diag, bot, 0.55 * w, g.yb + g.b + 30, 0.4)]
 
 
 # ---------------------------------------------------------------- uppercase
 
 
-def d_bowl(g, x0, w, ytop, ybot):
+def d_bowl(g, x0, w, ytop, ybot, sbot=1):
+    """A D-shaped bowl from a stem at x0; sbot < 1 thins its bottom line (B's waist, where two bowls meet)."""
     ry = (ytop - ybot) / 2
     rx = min(ry * 1.15, w * 0.8)
     xc = x0 + w - rx
     yc = (ytop + ybot) / 2
+    if sbot != 1:
+        return S(
+            LN(x0, ytop, xc, ytop),
+            ARC(xc, yc, rx, ry, 90, -40),
+            ARC(xc, yc, rx, ry, -40, -90, 1, sbot)[1:],
+            LN(xc, ybot, x0, ybot, sbot),
+        )
     return S(LN(x0, ytop, xc, ytop), ARC(xc, yc, rx, ry, 90, -90), LN(xc, ybot, x0, ybot))
+
+
+def _uc_stem_fillets(g, stem, bowl, x0, ytop, ybot, k=1.0):
+    """The two counter corners where a bowl or arms leave a stem at x0, inside the band (ybot, ytop)."""
+    return [_fl(g, stem, bowl, x0 + g.a + 20, ytop - g.b - 20, k), _fl(g, stem, bowl, x0 + g.a + 20, ybot + g.b + 20, k)]
 
 
 @glyph("A")
 def _A(g):
     w = g.wn * 1.3
+    left, right = LN(0, g.yb, w / 2, g.yC, 1, 0.9), LN(w / 2, g.yC, w, g.yb, 0.9, 1)
+    yb, hb = 0.26 * g.C, 0.78 * g.b
+    bar = LN(w * 0.22, yb, w * 0.78, yb, 0.78)
     return [
-        S(LN(0, g.yb, w / 2, g.yC, 1, 0.9), LN(w / 2, g.yC, w, g.yb, 0.9, 1)),
-        LN(w * 0.22, 0.26 * g.C, w * 0.78, 0.26 * g.C, 0.78),
+        S(left, right),
+        bar,
+        _fl(g, left, right, w / 2, 0.55 * g.C, 0.4),
+        *(_fl(g, leg, bar, w / 2 + sx * w * 0.2, yb + sy * (hb + 20), 0.5) for sx, leg in ((-1, left), (1, right)) for sy in (-1, 1)),
     ]
 
 
 @glyph("B")
 def _B(g):
     w = g.wn * 1.18
-    ym = 0.55 * g.C
-    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, w * 0.86, g.yC, ym), d_bowl(g, 0, w, ym, g.yb)]
+    ym = 0.52 * g.C  # low waist, thin where the bowls meet: the upper counter stays open at 900
+    stem, up, lo = LN(0, g.yC, 0, g.yb), d_bowl(g, 0, w * 0.88, g.yC, ym, 0.8), d_bowl(g, 0, w, ym, g.yb)
+    return [
+        stem,
+        up,
+        lo,
+        *_uc_stem_fillets(g, stem, [up, lo], 0, g.yC, ym),
+        *_uc_stem_fillets(g, stem, [up, lo], 0, ym, g.yb),
+    ]
 
 
 @glyph("C")
@@ -366,16 +578,21 @@ def _C(g):
 
 @glyph("D")
 def _D(g):
-    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, g.wn * 1.25, g.yC, g.yb)]
+    stem, bowl = LN(0, g.yC, 0, g.yb), d_bowl(g, 0, g.wn * 1.25, g.yC, g.yb)
+    return [stem, bowl, *_uc_stem_fillets(g, stem, bowl, 0, g.yC, g.yb)]
 
 
 @glyph("E")
 def _E(g):
     w = g.wn * 0.95
     ym = 0.5 * g.C
+    top, stem, bot = LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb), LN(0, g.yb, w, g.yb)
+    mid = LN(0, ym, w * 0.82, ym, 0.82)
     return [
-        S(LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb), LN(0, g.yb, w, g.yb)),
-        LN(0, ym, w * 0.82, ym, 0.82),
+        S(top, stem, bot),
+        mid,
+        *_uc_stem_fillets(g, stem, [top, mid], 0, g.yC, ym + 0.82 * g.b - g.b, 0.5),
+        *_uc_stem_fillets(g, stem, [mid, bot], 0, ym - 0.82 * g.b + g.b, g.yb, 0.5),
     ]
 
 
@@ -383,25 +600,34 @@ def _E(g):
 def _F(g):
     w = g.wn * 0.92
     ym = 0.48 * g.C
-    return [S(LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb)), LN(0, ym, w * 0.82, ym, 0.82)]
+    top, stem, mid = LN(w, g.yC, 0, g.yC), LN(0, g.yC, 0, g.yb), LN(0, ym, w * 0.82, ym, 0.82)
+    return [
+        S(top, stem),
+        mid,
+        *_uc_stem_fillets(g, stem, [top, mid], 0, g.yC, ym + 0.82 * g.b - g.b, 0.5),
+        _fl(g, stem, mid, g.a + 20, ym - 0.82 * g.b - 20, 0.5),
+    ]
 
 
 @glyph("G")
 def _G(g):
     rx = g.wn * 0.7
     ex, ey = at(rx, g.cyC, rx, g.ryC, 345)
-    return [
-        S(
-            ARC(rx, g.cyC, rx, g.ryC, 45, 345, g.dot * 1.1, 1, 0.7, 0),
-            LN(ex, ey, rx * 0.95, ey, 1, 0.85),
-        )
-    ]
+    arc, bar = ARC(rx, g.cyC, rx, g.ryC, 45, 345, g.dot * 1.1, 1, 0.7, 0), LN(ex, ey, rx * 0.95, ey, 1, 0.85)
+    return [S(arc, bar), _fl(g, arc[-6:], bar, ex - g.a - 20, ey - g.b - 30)]  # no spur under the bar
 
 
 @glyph("H")
 def _H(g):
     w = g.wn * 1.2
-    return [LN(0, g.yC, 0, g.yb), LN(w, g.yC, w, g.yb), LN(0, 0.5 * g.C, w, 0.5 * g.C)]
+    ym = 0.5 * g.C
+    left, right, bar = LN(0, g.yC, 0, g.yb), LN(w, g.yC, w, g.yb), LN(0, ym, w, ym)
+    return [
+        left,
+        right,
+        bar,
+        *(_fl(g, st, bar, x, ym + sy * (g.b + 20), 0.5) for st, x in ((left, g.a + 20), (right, w - g.a - 20)) for sy in (-1, 1)),
+    ]
 
 
 @glyph("I")
@@ -420,25 +646,34 @@ def _J(g):
 @glyph("K")
 def _K(g):
     w = g.wn * 1.1
+    stem, arm, leg = LN(0, g.yC, 0, g.yb), LN(0, 0.3 * g.C, w, g.yC, 0.55, 1), LN(w * 0.3, 0.5 * g.C, w + 10, g.yb, 0.55, 1)
     return [
-        LN(0, g.yC, 0, g.yb),
-        LN(0, 0.3 * g.C, w, g.yC, 0.55, 1),
-        LN(w * 0.3, 0.5 * g.C, w + 10, g.yb, 0.55, 1),
+        stem,
+        arm,
+        leg,
+        _fl(g, stem, arm, g.a + 20, 0.8 * g.C, 0.4),
+        _fl(g, arm, leg, 0.85 * w, 0.45 * g.C, 0.4),
     ]
 
 
 @glyph("L")
 def _L(g):
-    return [S(LN(0, g.yC, 0, g.yb), LN(0, g.yb, g.wn * 0.9, g.yb))]
+    stem, foot = LN(0, g.yC, 0, g.yb), LN(0, g.yb, g.wn * 0.9, g.yb)
+    return [S(stem, foot), _fl(g, stem, foot, g.a + 20, g.yb + g.b + 20, 0.5)]
 
 
 @glyph("M")
 def _M(g):
     w = g.wn * 1.55
+    left, right = LN(0, g.yb, 0, g.yC), LN(w, g.yC, w, g.yb)
+    d1, d2 = LN(0, g.yC, w / 2, 0.32 * g.C, 0.8, 0.75), LN(w / 2, 0.32 * g.C, w, g.yC, 0.75, 0.8)
     return [
-        LN(0, g.yb, 0, g.yC),
-        S(LN(0, g.yC, w / 2, 0.32 * g.C, 0.8, 0.75), LN(w / 2, 0.32 * g.C, w, g.yC, 0.75, 0.8)),
-        LN(w, g.yC, w, g.yb),
+        left,
+        S(d1, d2),
+        right,
+        _fl(g, left, d1, g.a + 20, 0.6 * g.C, 0.4),
+        _fl(g, right, d2, w - g.a - 20, 0.6 * g.C, 0.4),
+        _fl(g, d1, d2, w / 2, 0.75 * g.C, 0.4),
     ]
 
 
@@ -446,10 +681,13 @@ def _M(g):
 def _N(g):
     w = g.wn * 1.2
     ym = (g.yC + g.yb) / 2
+    left, right, diag = LN(0, g.yb, 0, g.yC), LN(w, g.yb, w, g.yC), S(LN(0, g.yC, w / 2, ym, 0.75, 1), LN(w / 2, ym, w, g.yb, 1, 0.75))
     return [
-        LN(0, g.yb, 0, g.yC),
-        S(LN(0, g.yC, w / 2, ym, 0.75, 1), LN(w / 2, ym, w, g.yb, 1, 0.75)),
-        LN(w, g.yb, w, g.yC),
+        left,
+        diag,
+        right,
+        _fl(g, left, diag, g.a + 20, 0.4 * g.C, 0.4),
+        _fl(g, right, diag, w - g.a - 20, 0.6 * g.C, 0.4),
     ]
 
 
@@ -461,7 +699,13 @@ def _O(g):
 
 @glyph("P")
 def _P(g):
-    return [LN(0, g.yC, 0, g.yb), d_bowl(g, 0, g.wn * 1.08, g.yC, 0.42 * g.C)]
+    stem, bowl = LN(0, g.yC, 0, g.yb), d_bowl(g, 0, g.wn * 1.08, g.yC, 0.42 * g.C)
+    return [stem, bowl, *_uc_stem_fillets(g, stem, bowl, 0, g.yC, 0.42 * g.C), _P_foot(g, stem, bowl, 0.42 * g.C)]
+
+
+def _P_foot(g, stem, bowl, ym):
+    """The corner under a P/R bowl, where its bottom line leaves the stem."""
+    return _fl(g, stem, bowl, g.a + 20, ym - g.b - 20, 0.5)
 
 
 @glyph("Q")
@@ -476,10 +720,15 @@ def _Q(g):
 @glyph("R")
 def _R(g):
     w = g.wn * 1.1
+    ym = 0.44 * g.C
+    stem, bowl, leg = LN(0, g.yC, 0, g.yb), d_bowl(g, 0, w, g.yC, ym), LN(w * 0.42, ym, w + 15, g.yb, 0.72, 1)
     return [
-        LN(0, g.yC, 0, g.yb),
-        d_bowl(g, 0, w, g.yC, 0.44 * g.C),
-        LN(w * 0.42, 0.44 * g.C, w + 15, g.yb, 0.72, 1),
+        stem,
+        bowl,
+        leg,
+        *_uc_stem_fillets(g, stem, bowl, 0, g.yC, ym),
+        _fl(g, stem, [bowl, leg], g.a + 20, ym - g.b - 20, 0.5),
+        _fl(g, bowl, leg, w * 0.9, ym - g.b - 20, 0.5),
     ]
 
 
@@ -491,7 +740,8 @@ def _S(g):
 @glyph("T")
 def _T(g):
     w = g.wn * 1.15
-    return [LN(0, g.yC, w, g.yC), LN(w / 2, g.yC, w / 2, g.yb)]
+    bar, stem = LN(0, g.yC, w, g.yC), LN(w / 2, g.yC, w / 2, g.yb)
+    return [bar, stem, *(_fl(g, bar, stem, w / 2 + sx * (g.a + 20), g.yC - g.b - 20, 0.5) for sx in (-1, 1))]
 
 
 @glyph("U")
@@ -504,39 +754,61 @@ def _U(g):
 @glyph("V")
 def _V(g):
     w = g.wn * 1.3
-    return [S(LN(0, g.yC, w / 2, g.yb, 1, 0.85), LN(w / 2, g.yb, w, g.yC, 0.85, 1))]
+    left, right = LN(0, g.yC, w / 2, g.yb, 1, 0.85), LN(w / 2, g.yb, w, g.yC, 0.85, 1)
+    return [S(left, right), _fl(g, left, right, w / 2, 0.45 * g.C, 0.4)]
 
 
 @glyph("W")
 def _W(g):
     w = g.wn * 1.95
-    return [
-        S(
-            LN(0, g.yC, w * 0.25, g.yb, 1, 0.8),
-            LN(w * 0.25, g.yb, w * 0.5, g.yC * 0.8, 0.8, 0.8),
-            LN(w * 0.5, g.yC * 0.8, w * 0.75, g.yb, 0.8, 0.8),
-            LN(w * 0.75, g.yb, w, g.yC, 0.8, 1),
-        )
+    ls = [
+        LN(0, g.yC, w * 0.25, g.yb, 1, 0.8),
+        LN(w * 0.25, g.yb, w * 0.5, g.yC * 0.8, 0.8, 0.8),
+        LN(w * 0.5, g.yC * 0.8, w * 0.75, g.yb, 0.8, 0.8),
+        LN(w * 0.75, g.yb, w, g.yC, 0.8, 1),
     ]
+    return [S(*ls), *_vee_fillets(g, ls, w, g.C)]
+
+
+def _vee_fillets(g, ls, w, h):
+    """W/w: the insides of the two bottom vees and of the middle peak."""
+    return [
+        _fl(g, ls[0], ls[1], 0.25 * w, 0.55 * h, 0.4),
+        _fl(g, ls[2], ls[3], 0.75 * w, 0.55 * h, 0.4),
+        _fl(g, ls[1], ls[2], 0.5 * w, 0.2 * h, 0.4),
+    ]
+
+
+def _cross_fillets(g, l1, l2, w, cy, h):
+    """x/X: the four corners where the two strokes cross."""
+    return [_fl(g, l1, l2, w / 2 + dx * w * 0.35, cy + dy * h * 0.35, 0.4) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))]
 
 
 @glyph("X")
 def _X(g):
     w = g.wn * 1.2
-    return [LN(0, g.yC, w, g.yb), LN(0, g.yb, w, g.yC, 0.8)]
+    l1, l2 = LN(0, g.yC, w, g.yb), LN(0, g.yb, w, g.yC, 0.8)
+    return [l1, l2, *_cross_fillets(g, l1, l2, w, g.C / 2, g.C)]
 
 
 @glyph("Y")
 def _Y(g):
     w = g.wn * 1.2
     ym = 0.45 * g.C
-    return [S(LN(0, g.yC, w / 2, ym, 0.9, 1), LN(w / 2, ym, w / 2, g.yb)), LN(w, g.yC, w / 2, ym, 0.8)]
+    arm, stem, arm2 = LN(0, g.yC, w / 2, ym, 0.9, 1), LN(w / 2, ym, w / 2, g.yb), LN(w, g.yC, w / 2, ym, 0.8)
+    return [
+        S(arm, stem),
+        arm2,
+        _fl(g, arm, arm2, w / 2, 0.75 * g.C, 0.4),
+        _fl(g, [arm, arm2], stem, w / 2 - g.a - 20, ym - 0.1 * g.C, 0.5),
+        _fl(g, [arm, arm2], stem, w / 2 + g.a + 20, ym - 0.1 * g.C, 0.5),
+    ]
 
 
 @glyph("Z")
 def _Z(g):
     w = g.wn * 1.05
-    return [S(LN(0, g.yC, w, g.yC), LN(w, g.yC, 0, g.yb, 1, 1.05), LN(0, g.yb, w, g.yb))]
+    return _z_shape(g, w, g.yC, g.C)
 
 
 # ---------------------------------------------------------------- figures
@@ -546,17 +818,25 @@ def fig_w(g):
     return g.wn * 0.95 + g.a * 0.3
 
 
+def _fig_s(g):
+    """Pen scale of the figures' bowls and loops: 1 at 300, 0.88 at 900, so 0 6 8 9 keep open counters.
+
+    (Their width is set by the width class, so a wider skeleton alone would just be scaled back.)"""
+    return 1 - 0.12 * (g.a - 36) / 76
+
+
 @glyph("zero")
 def _0(g):
     rx = fig_w(g) / 2
-    return [ARC(rx, g.cyC, rx, g.ryC, 0, 360)]
+    return [ARC(rx, g.cyC, rx, g.ryC, 0, 360, _fig_s(g))]
 
 
 @glyph("one")
 def _1(g):
     w = fig_w(g)
     x = w * 0.62
-    return [LN(x, g.yC, x, g.yb), LN(x, g.yC, w * 0.15, g.C * 0.75, 1, 0.75)]
+    stem, flag = LN(x, g.yC, x, g.yb), LN(x, g.yC, w * 0.15, g.C * 0.75, 1, 0.75)
+    return [stem, flag, _fl(g, flag, stem, x - g.a - 20, g.C * 0.65, 0.4)]
 
 
 @glyph("two")
@@ -566,12 +846,10 @@ def _2(g):
     r = g.C * 0.27
     cy = g.C + g.ov - g.b - r
     ex, ey = at(rx, cy, rx, r, -35)
+    diag, base = LN(ex, ey, 0, g.yb, 1, 1.05), LN(0, g.yb, w, g.yb)
     return [
-        S(
-            ARC(rx, cy, rx, r, 160, -35, g.dot * 1.1, 1, 0.8, 0),
-            LN(ex, ey, 0, g.yb, 1, 1.05),
-            LN(0, g.yb, w, g.yb),
-        )
+        S(ARC(rx, cy, rx, r, 160, -35, g.dot * 1.1, 1, 0.8, 0), diag, base),
+        _fl(g, diag, base, 0.45 * w, g.yb + g.b + 30, 0.4),
     ]
 
 
@@ -592,9 +870,18 @@ def _3(g):
 @glyph("four")
 def _4(g):
     w = fig_w(g) * 1.05
-    x = w * 0.72
-    y = 0.3 * g.C
-    return [LN(x, g.yC, x, g.yb), S(LN(x, g.yC, 0, y, 0.85), LN(0, y, w, y))]
+    x = w * 0.76
+    y = 0.28 * g.C
+    t = (g.a - 36) / 76
+    sd, sb = 0.85 - 0.17 * t, 1 - 0.15 * t  # thinner diagonal and bar at 900: the triangle keeps a counter
+    stem, diag, bar = LN(x, g.yC, x, g.yb), LN(x, g.yC, 0, y, sd), LN(0, y, w, y, sb)
+    return [
+        stem,
+        S(diag, bar),
+        _fl(g, stem, bar, x + g.a + 20, y - sb * g.b - 20, 0.5),
+        _fl(g, stem, bar, x - g.a - 20, y - sb * g.b - 20, 0.5),
+        _fl(g, stem, bar, x + g.a + 20, y + sb * g.b + 20, 0.5),
+    ]
 
 
 @glyph("five")
@@ -603,10 +890,15 @@ def _5(g):
     top = g.yC
     rl = 0.31 * g.C
     yl = g.b - g.ov + rl
-    sx, sy = at(w * 0.5, yl, w * 0.5, rl, 150)
+    # The bowl starts inside the stem's foot, so it grows out of it with no lump or seam.
+    _, yf = at(w * 0.5, yl, w * 0.5, rl, 130)
+    bar, stem = LN(w * 0.95, top, w * 0.12, top), LN(w * 0.12, top, w * 0.1, yf)
+    bowl = ARC(w * 0.5, yl, w * 0.5, rl, 130, -155, 1, g.dot * 1.05, 0, 0.8)
     return [
-        S(LN(w * 0.95, top, w * 0.12, top), LN(w * 0.12, top, w * 0.1, 0.52 * g.C), LN(w * 0.1, 0.52 * g.C, sx, sy)),
-        ARC(w * 0.5, yl, w * 0.5, rl, 150, -155, 1, g.dot * 1.05, 0, 0.8),
+        S(bar, stem),
+        bowl,
+        _fl(g, bar, stem, w * 0.12 + g.a + 20, top - g.b - 20, 0.5),
+        _fl(g, stem, bowl, w * 0.1 + g.a + 20, yl + rl + g.b + 20, 0.5),
     ]
 
 
@@ -616,25 +908,27 @@ def _6(g):
     rx = w / 2
     rl = 0.31 * g.C
     yl = g.b - g.ov + rl
-    return [
-        ARC(rx, yl, rx, rl, 0, 360),
-        ARC(rx * 1.6, yl, rx * 1.6, g.C + g.ov - g.b - yl, 72, 180, g.dot * 1.05, 1, 0.8, 0),
-    ]
+    loop = ARC(rx, yl, rx, rl, 0, 360, _fig_s(g))
+    tail = ARC(rx * 1.6, yl, rx * 1.6, g.C + g.ov - g.b - yl, 76, 180, g.dot * 1.05, _fig_s(g), 0.8, 0)
+    return [loop, tail, _fl(g, loop, tail, 2 * rx, yl + rl + g.b, 0.3)]
 
 
 @glyph("seven")
 def _7(g):
     w = fig_w(g)
-    return [S(LN(0, g.yC, w, g.yC), LN(w, g.yC, w * 0.32, g.yb, 1, 1.05))]
+    bar, diag = LN(0, g.yC, w, g.yC), LN(w, g.yC, w * 0.32, g.yb, 1, 1.05)
+    return [S(bar, diag), _fl(g, bar, diag, 0.55 * w, g.yC - g.b - 30, 0.4)]
 
 
 @glyph("eight")
 def _8(g):
     w = fig_w(g)
     top, bot = g.C + g.ov - g.b, g.b - g.ov
-    ym = 0.56 * g.C
+    ym = 0.56 * g.C - 0.4 * (g.a - 36)  # the waist drops at 900, so the upper loop isn't a dot
     ru, rl = (top - ym) / 2, (ym - bot) / 2
-    return [ARC(w / 2, ym + ru, w * 0.43, ru, 0, 360), ARC(w / 2, ym - rl, w / 2, rl, 0, 360)]
+    s = _fig_s(g)
+    up, lo = ARC(w / 2, ym + ru, w * (0.43 + 0.0004 * (g.a - 36)), ru, 0, 360, s), ARC(w / 2, ym - rl, w / 2, rl, 0, 360, s)
+    return [up, lo, *(_fl(g, up, lo, w / 2 + sx * w * 0.45, ym, 0.5) for sx in (-1, 1))]
 
 
 @glyph("nine")
@@ -643,10 +937,9 @@ def _9(g):
     rx = w / 2
     ru = 0.31 * g.C
     yu = g.C + g.ov - g.b - ru
-    return [
-        ARC(rx, yu, rx, ru, 0, 360),
-        ARC(w - rx * 1.6, yu, rx * 1.6, yu - g.b + g.ov, 252, 360, g.dot * 1.05, 1, 0.8, 0),
-    ]
+    loop = ARC(rx, yu, rx, ru, 0, 360, _fig_s(g))
+    tail = ARC(w - rx * 1.6, yu, rx * 1.6, yu - g.b + g.ov, 256, 360, g.dot * 1.05, _fig_s(g), 0.8, 0)
+    return [loop, tail, _fl(g, loop, tail, 0, yu - ru - g.b, 0.3)]
 
 
 # ---------------------------------------------------------------- punctuation
@@ -665,17 +958,23 @@ def _gf_tail(g, x, y, flip=False):
     """Curved tail from a ball at (x, y): sweeps down and left (comma, quoteright) or, flipped, up and
     right (quoteleft). Starts at the ball's centre so the hull grows out of the ball."""
     r = g.pdot * g.a
-    rt, rh = 0.9 * r, 1.9 * r
+    rt, rh = 0.9 * r, _gf_rh(g)
     s0, s1 = g.pdot * 0.6, g.pdot * 0.2
     if flip:
         return ARC(x + rt, y, rt, rh, 180, 75, s0, s1, 1, 1)
     return ARC(x - rt, y, rt, rh, 0, -105, s0, s1, 1, 1)
 
 
+def _gf_rh(g):
+    """The comma tail's height: a constant part keeps light commas and quotes as tall as the straight
+    quote, and they grow less than the ball at 900."""
+    return 150 + 0.25 * g.a
+
+
 def _gf_tail_drop(g):
     """How far below the ball's centre the tail reaches (tip centre plus its radius)."""
     r = g.pdot * g.a
-    return 1.9 * r * math.sin(math.radians(105)) + 0.2 * r
+    return _gf_rh(g) * math.sin(math.radians(105)) + 0.2 * r
 
 
 @glyph("comma")
@@ -868,7 +1167,7 @@ def _greater(g):
 @glyph("asterisk")
 def _asterisk(g):
     r = g.wn * 0.42 + g.a * 0.3
-    cx, cy = r, g.C - r * 1.0
+    cx, cy = r, g.C - r - 0.6 * g.a  # the round spoke ends top out at the cap height
     out = []
     for ang in (90, 162, 234, 306, 18):
         x, y = at(cx, cy, r, r, ang)
@@ -894,13 +1193,14 @@ def _numbersign(g):
 
 @glyph("percent")
 def _percent(g):
-    r = g.wn * 0.26 + g.a * 0.5
+    r = g.wn * 0.26 + g.a * 0.7  # the rings grow with the pen, so their counters stay open at 900
     w = 4 * r + 60
-    ry = 0.19 * g.C
+    ry = 0.19 * g.C + 0.1 * (g.a - 36)
     return [
         ARC(r, g.C - ry - g.b, r, ry, 0, 360, 0.7),
         ARC(w - r, ry + g.b, r, ry, 0, 360, 0.7),
-        LN(w * 0.18, g.b, w * 0.82, g.yC, 0.75),
+        # One slope at every weight (the hull's sides then pick the same pens in both masters).
+        LN(w / 2 - 0.3 * (g.yC - g.b), g.b, w / 2 + 0.3 * (g.yC - g.b), g.yC, 0.75),
     ]
 
 
@@ -940,10 +1240,10 @@ def _ampersand(g):
 def _at(g):
     w = g.wn * 1.9 + g.a * 1.5
     R = w / 2
-    cy = 0.37 * g.C
-    ry = 0.42 * g.C
-    rb = g.wn * 0.3 + g.a * 0.2  # inner bowl half-width
-    rbv = rb * 1.1
+    cy = 0.4 * g.C
+    ry = 0.47 * g.C  # taller, so the @ isn't squat
+    rb = g.wn * 0.3 + g.a * 0.35  # inner bowl half-width: grows with the pen so the a stays open at 900
+    rbv = rb * 1.15
     si = 0.557 - 0.00158 * g.a  # inner stroke: 0.5 at 300, 0.38 at 900, so the counter stays open
     cxi = R - 0.45 * rb
     xs = cxi + rb  # stem on the bowl's right edge, like the a
@@ -1060,7 +1360,7 @@ SPACING = {
     "U": (1.15, 1, 1), "V": (1.08, D, D), "W": (1.55, D, D), "X": (1.15, D, D), "Y": (1.08, D, D),
     "Z": (1.00, 0.8, 0.8),
     # figures (proportional)
-    "zero": (0.96, R, R), "one": (0.67, 0.5, 1), "two": (0.92, R, 0.8), "three": (0.92, 0.6, R),
+    "zero": (1.00, R, R), "one": (0.67, 0.5, 1), "two": (0.92, R, 0.8), "three": (0.92, 0.6, R),
     "four": (0.96, 0.5, 1), "five": (0.92, 0.8, R), "six": (0.96, R, R), "seven": (0.92, 0.6, 0.5),
     "eight": (0.96, R, R), "nine": (0.96, R, R),
     # accented letters with their own shapes; i and I composites measure only the stem (marks overhang)
@@ -1116,7 +1416,7 @@ def _ac_zone(g, cap, narrow=False):
     k = 0.85 if cap else 1.0
     r = k * (6.7 + 0.618 * g.a)  # mark pen radius: 29 at 300, 76 at 900 (lowercase)
     if cap:
-        bot, top = g.C + 90 - 0.6 * g.a, 900 + 0.2 * g.a
+        bot, top = g.C + 82 - 0.6 * g.a, 885 + 0.2 * g.a  # every cap mark's ink stays under the ascender
         hw = 95 + 0.5 * g.a
     else:
         bot, top = g.X + 118 - 0.8 * g.a, 810 + 0.1 * g.a
@@ -1132,8 +1432,11 @@ def _ac_zone(g, cap, narrow=False):
 
 def _ac_acute(g, cx, z, flip=False):
     d = -1 if flip else 1
+    # The same taper (in units) and one roundness at every weight, so the hull's sides switch pens in
+    # nearly the same directions in both masters and in-between weights stay straight.
     w = 0.32 * z.hw
-    return [LN(cx - d * w, z.lo, cx + d * w, z.hi, z.s * 0.75, z.s * 1.05, 0.4, 1)]
+    s1 = z.s * 1.05
+    return [LN(cx - d * w, z.lo, cx + d * w, z.hi, s1 - 9 / g.a, s1, 0.8, 0.8)]
 
 
 def _ac_grave(g, cx, z):
@@ -1141,9 +1444,13 @@ def _ac_grave(g, cx, z):
 
 
 def _ac_circumflex(g, cx, z, flip=False):
-    y0, y1 = (z.hi, z.lo) if flip else (z.lo, z.hi)
     s = z.s * 0.9
-    return [S(LN(cx - z.hw, y0, cx, y1, s, s, 0.7, 0.4), LN(cx, y1, cx + z.hw, y0, s, s, 0.4, 0.7))]
+    # Its top pens are flatter than the acute's round top: raise them so the ink reaches the same height.
+    up = z.r - s * (g.b + 0.55 * (g.a - g.b))
+    y0, y1 = (z.hi + up, z.lo) if flip else (z.lo, z.hi + up)  # a caron's tips are on top
+    # One roundness, and a half-width that follows the height, so the arms keep their slope across weights.
+    hw = 0.5 * z.hw + 0.6 * abs(y1 - y0)
+    return [S(LN(cx - hw, y0, cx, y1, s, s, 0.55, 0.55), LN(cx, y1, cx + hw, y0, s, s, 0.55, 0.55))]
 
 
 def _ac_caron(g, cx, z):
@@ -1175,7 +1482,7 @@ def _ac_dotaccent(g, cx, z):
 
 def _ac_ring(g, cx, z):
     s = z.s * 0.62
-    bot, top = (z.bot, z.top + 10) if z.cap else (z.bot - 4, z.top + 20)  # a ring needs height for its counter
+    bot, top = (z.bot - 4, z.top) if z.cap else (z.bot - 4, z.top + 20)  # a ring needs height for its counter
     ry = (top - bot) / 2 - s * g.b
     rx = ry * 0.6 + 40 + 0.15 * g.a
     return [ARC(cx, (bot + top) / 2, rx, ry, 90, 450, s, s, 0.3, 0.3)]
@@ -1186,7 +1493,8 @@ def _ac_macron(g, cx, z):
 
 
 def _ac_hungarumlaut(g, cx, z):
-    d = 0.42 * z.hw
+    # The two strokes stay a shadow border (24 + 0.21a) plus 10 apart at their tops, at every weight.
+    d = 1.05 * z.r + 17 + 0.105 * g.a
     return [*_ac_acute(g, cx - d, z), *_ac_acute(g, cx + d, z)]
 
 
@@ -1201,8 +1509,9 @@ def _ac_ogonek(g, cx, z):
     """Hook hanging from the base's bottom at cx, curling left and back right."""
     s = z.s * 0.85
     ro = 45 + 0.35 * g.a
-    yo = -100 - 0.25 * g.a
-    return [ARC(cx, yo, ro, -yo + 30, 90, 300, s, z.s * 1.05, 0, 1)]
+    # Its lowest ink sits 25 above the descender (it hangs from y = 30).
+    yo = (30 + g.D + 25 + 0.9 * z.r) / 2
+    return [ARC(cx, yo, ro, 30 - yo, 90, 300, s, z.s * 1.05, 0, 1)]
 
 
 def _ac_commacaron(g, x, ytop):
@@ -1267,7 +1576,8 @@ def _ac_comma_composite(base):
             x, top = 0, g.C
         else:  # l, t
             x, top = 0, g.A
-        return [*strokes, *_ac_commacaron(g, x + g.a + 25, top)]
+        # The comma keeps a shadow border plus 10 clear of the stem.
+        return [*strokes, *_ac_commacaron(g, x + g.a + 34 + 0.21 * g.a, top)]
 
     return fn
 
@@ -1316,13 +1626,21 @@ for _mark in ("acute", "dieresis", "cedilla", "ring", "macron", "caron", "dotacc
 
 @glyph("AE")
 def _AE(g):
-    wa, we = g.wn * 0.72, g.wn * 0.78
-    ym = 0.5 * g.C
+    # The A half widens with the pen and its bar thins and drops at 900, so its counter stays open.
+    t = (g.a - 36) / 76
+    wa, we = g.wn * 0.72 + 0.7 * (g.a - 36), g.wn * 0.78
+    ym, yb, sb = 0.5 * g.C, (0.26 - 0.04 * t) * g.C, 0.78 - 0.13 * t
+    diag = LN(0, g.yb, wa, g.yC, 1, 0.9)
+    top, stem, bot = LN(wa + we, g.yC, wa, g.yC), LN(wa, g.yC, wa, g.yb), LN(wa, g.yb, wa + we, g.yb)
+    mid, bar = LN(wa, ym, wa + we * 0.82, ym, 0.82), LN(wa * 0.3, yb, wa, yb, sb)
     return [
-        LN(0, g.yb, wa, g.yC, 1, 0.9),
-        S(LN(wa + we, g.yC, wa, g.yC), LN(wa, g.yC, wa, g.yb), LN(wa, g.yb, wa + we, g.yb)),
-        LN(wa, ym, wa + we * 0.82, ym, 0.82),
-        LN(wa * 0.3, 0.26 * g.C, wa, 0.26 * g.C, 0.78),
+        diag,
+        S(top, stem, bot),
+        mid,
+        bar,
+        _fl(g, diag, stem, wa - g.a - 10, 0.6 * g.C, 0.4),
+        *_uc_stem_fillets(g, stem, [top, mid], wa, g.yC, ym + 0.82 * g.b - g.b, 0.5),
+        *_uc_stem_fillets(g, stem, [mid, bot], wa, ym - 0.82 * g.b + g.b, g.yb, 0.5),
     ]
 
 
@@ -1423,7 +1741,8 @@ def _Thorn(g):
 
 @glyph("thorn")
 def _thorn(g):
-    return [LN(0, g.yA, 0, g.yD), bowl_right(g, 0, _lc_rx(g), g.cy, g.ry)]
+    stem, bowl = LN(0, g.yA, 0, g.yD), bowl_right(g, 0, _lc_rx(g), g.cy, g.ry)
+    return [stem, bowl, *_lc_bowl_fillets(g, bowl, stem, 0, 1)]
 
 
 @glyph("germandbls")
@@ -1480,6 +1799,11 @@ def _chevron(g, x0, w, left):
     return S(LN(back, y + h, tip, y, 0.8, 0.85), LN(tip, y, back, y - h, 0.85, 0.8))
 
 
+def _gq_step(g, w):
+    """Offset of a guillemet's second chevron: its pens stay a shadow border apart at 900 too."""
+    return w * 0.7 + 1.9 * g.a + 30
+
+
 @glyph("guilsinglleft", 0x2039)
 def _guilsinglleft(g):
     return [_chevron(g, 0, g.wn * 0.42, True)]
@@ -1493,13 +1817,13 @@ def _guilsinglright(g):
 @glyph("guillemotleft", 0x00AB)
 def _guillemotleft(g):
     w = g.wn * 0.42
-    return [_chevron(g, 0, w, True), _chevron(g, w * 0.95 + g.a, w, True)]
+    return [_chevron(g, 0, w, True), _chevron(g, _gq_step(g, w), w, True)]
 
 
 @glyph("guillemotright", 0x00BB)
 def _guillemotright(g):
     w = g.wn * 0.42
-    return [_chevron(g, 0, w, False), _chevron(g, w * 0.95 + g.a, w, False)]
+    return [_chevron(g, 0, w, False), _chevron(g, _gq_step(g, w), w, False)]
 
 
 @glyph("exclamdown", 0x00A1)
