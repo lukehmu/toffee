@@ -29,6 +29,8 @@ def pairs_of(font):
         for st in lk.SubTable:
             if st.LookupType == 9:
                 st = st.ExtSubTable
+            if st.LookupType != 2:  # mark positioning (features.py), not kerning
+                continue
             if st.Format != 1:
                 raise SystemExit("unexpected PairPos format")
             for left, ps in zip(st.Coverage.glyphs, st.PairSet):

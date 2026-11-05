@@ -20,6 +20,7 @@ from fontTools.ttLib.tables._g_l_y_f import flagOverlapSimple
 from fontTools.ttLib.tables.otTables import PaintFormat
 from fontTools import varLib
 
+from features import ot_features, set_code_pages, zero_width
 from glyphs import BASE_OF, GLYPHS, PUNCT_SIDE, SPACING, geo
 from kern import kern_feature
 
@@ -37,7 +38,7 @@ SHADOW_MAX = 1000
 VERSION = 1.0
 VERSION_STRING = "Version 1.000"
 RELEASE_EPOCH = 1793750400  # 2026-11-04 00:00 UTC; bump with VERSION
-FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide"]]
+FIXED_WIDTH = [["plus", "minus", "equal", "less", "greater", "multiply", "divide", "plusminus", "logicalnot"]]
 
 WEIGHTS = {300: (36, 32), 900: (112, 74)}  # wght -> (pen half-width, pen half-height)
 SLANTS = {0: 0.0, -12: math.tan(math.radians(12))}
@@ -225,7 +226,7 @@ def build_master(wght, slnt, shdw):
     n_adv = g.wn + 2 * a + 2 * p.sb  # every width class is a ratio of this
     t = SLANTS[slnt]
     order = [".notdef", "space"]
-    cmap = {0x20: "space", 0xA0: "space"}
+    cmap = {0x20: "space", 0xA0: "space", 0xAD: "hyphen"}
     glyf = {".notdef": notdef(), "space": TTGlyphPen(None).glyph()}
     space_adv = round(0.3 * g.wn + 120)
     adv = {".notdef": 500, "space": space_adv}
@@ -255,6 +256,7 @@ def build_master(wght, slnt, shdw):
         for n in group:
             st, dx, advance, *rest = placed[n]
             placed[n] = (st, dx + (width - advance) / 2, width, *rest)
+    zero_width(placed)
     for name, (uni, _) in GLYPHS.items():
         strokes, dx, advance, *_ = placed[name]
         if name in composite_of:
@@ -296,7 +298,7 @@ def build_master(wght, slnt, shdw):
     )
     fb.setupPost()
     faces = {n: outline(placed[n][0], p, placed[n][1], 0.0) for n in GLYPHS}  # upright, at final x
-    fea = kern_feature(faces, {n: adv[n] for n in GLYPHS}, p, g)
+    fea = ot_features(placed, g, t, Y0) + kern_feature(faces, {n: adv[n] for n in GLYPHS}, p, g)
     if fea:
         fb.addOpenTypeFeatures(fea)
     return fb.font
@@ -396,7 +398,7 @@ def main():
     ]:
         vf["name"].setName(text, nid, 3, 1, 0x409)
     os2 = vf["OS/2"]
-    os2.recalcCodePageRanges(vf)
+    set_code_pages(vf)
     os2.usWinAscent = max(m["head"].yMax for m in masters)
     os2.usWinDescent = max(-m["head"].yMin for m in masters)
     prep = newTable("prep")  # smart dropout control for unhinted TrueType
