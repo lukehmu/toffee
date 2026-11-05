@@ -1,5 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Toffee proof</title>
 <style>
   @font-face { font-family: Toffee; src: url("fonts/Toffee[SHDW,slnt,wght].woff2") format("woff2"); font-weight: 300 900; }
@@ -9,6 +10,14 @@
   .set { font-size: 110px; font-variation-settings: "wght" 900, "slnt" 0, "SHDW" 0; }
   .punct { font-size: 80px; font-variation-settings: "wght" 900, "slnt" 0, "SHDW" 0; }
   .light { font-size: 110px; font-variation-settings: "wght" 300, "slnt" 0, "SHDW" 0; }
+  .text { font-size: 56px; white-space: normal; font-variation-settings: "wght" 800, "slnt" 0, "SHDW" 300; margin-bottom: 40px; }
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    p { white-space: normal; overflow-wrap: anywhere; }
+    .hero { font-size: 80px; margin-bottom: 110px; }
+    .set, .light, .mid { font-size: 52px; }
+    .punct, .text { font-size: 36px; }
+  }
   .mid { font-size: 110px; font-variation-settings: "wght" 600, "slnt" -12, "SHDW" 250; }
 </style>
 <p class="hero">Best<br>year<br>yet</p>
@@ -19,4 +28,16 @@
 <p class="set">0123456789 &amp;@</p>
 <p class="punct">!?.,:;'"()[]{}/\|-+=&lt;&gt;*#%$£€…“”‘’_~^</p>
 <p class="light">Hamburgefonstiv</p>
+<p class="text">0123456789 1 234 567,89 £12.50 €3,99 $40 12:30 4×3=12 9÷3 −5 50% #1 2026–27 “1984” ‘7’ «20» ¿1? ¡2!</p>
+<p class="text" lang="fr">À l’œuvre, ça va? Où est Noël? Ÿ ÿ Œ Ç É È Ê Ë</p>
+<p class="text" lang="de">Größe, Äpfel, Übermaß, Öl. ÄÖÜ ß</p>
+<p class="text" lang="es">¿Señor? ¡Año nuevo! Ñandú</p>
+<p class="text" lang="da">Blåbærsyltetøj Æ Ø Å Þ Ð ð þ</p>
+<p class="text" lang="pl">Zażółć gęślą jaźń. ŁÓDŹ ŻÓŁW ĄĘ</p>
+<p class="text" lang="cs">Příliš žluťoučký kůň úpěl ďábelské ódy. ŘŮŤĎŇĚ</p>
+<p class="text" lang="sk">Ľúbostný kôň, ĽĹŔ ľĺŕ</p>
+<p class="text" lang="hu">Árvíztűrő tükörfúrógép. ŐŰ őű</p>
+<p class="text" lang="ro">Țară, șapte, înainte, mâine, pâine. Ăă Ââ Îî Șș Țț</p>
+<p class="text" lang="tr">Pijamalı hasta yağız şoföre çabucak güvendi. İstanbul ĞŞÇÖÜ ğı</p>
+<p class="text" lang="cy">Parciais fy jac codi baw hud llawn dŵr ger tŷ Mabon. Ŵŵ Ŷŷ</p>
 <p class="mid">Hamburgefonstiv</p>
